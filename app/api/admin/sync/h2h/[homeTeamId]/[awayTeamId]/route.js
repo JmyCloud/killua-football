@@ -78,7 +78,7 @@ async function refresh(homeTeamId, awayTeamId) {
         include:  INCLUDE,
         per_page: 50,
         page:     1,
-        sort:   "-starting_at",   // ← أحدث مباراة أولاً
+        sortBy:   "starting_at",   // ← أحدث مباراة أولاً
         order:    "desc",
       }
     );
