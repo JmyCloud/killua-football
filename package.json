@@ -1,6 +1,17 @@
 {
+  "name": "killua-football",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
   "dependencies": {
     "@supabase/supabase-js": "^2.99.3",
+    "next": "latest",
+    "pg": "latest",
+    "react": "latest",
+    "react-dom": "latest",
     "zod": "^4.3.6"
   }
 }
