@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { fetchAllSportMonksPages } from "@/lib/sportmonks";
-import { staleWhileRevalidate } from "@/lib/cache";
+import { staleWhileRevalidate, filterOddsPayload } from "@/lib/cache";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,10 +30,11 @@ async function getCached(fixtureId) {
 
 async function refresh(fixtureId) {
   const syncResult = await query(
-    `select cache.start_sync($1, $2) as sync_id`,
+    `insert into cache.sync_runs (target_table, scope_key, status)
+     values ($1, $2, 'running') returning id`,
     ["odds_inplay_fixtures_bookmakers_35_raw", `fixture:${fixtureId}:bookmaker:${BOOKMAKER_ID}`]
   );
-  const syncId = syncResult.rows[0]?.sync_id;
+  const syncId = syncResult.rows[0]?.id;
   if (!syncId) throw new Error("Failed to create sync run");
 
   try {
@@ -51,15 +52,21 @@ async function refresh(fixtureId) {
            payload     = excluded.payload,
            pagination  = excluded.pagination,
            fetched_at  = excluded.fetched_at,
-           sync_run_id = excluded.sync_run_id,
-           updated_at  = now()`,
-        [fixtureId, BOOKMAKER_ID, page.page_number, JSON.stringify(page.payload), JSON.stringify(page.pagination), syncId]
+           sync_run_id = excluded.sync_run_id`,
+        [fixtureId, BOOKMAKER_ID, page.page_number,
+         JSON.stringify(page.payload), JSON.stringify(page.pagination), syncId]
       );
     }
 
-    await query(`select cache.finish_sync_odds_inplay($1, $2, $3)`, [fixtureId, BOOKMAKER_ID, syncId]);
+    await query(
+      `update cache.sync_runs set status = 'done', finished_at = now() where id = $1`,
+      [syncId]
+    );
   } catch (err) {
-    await query(`select cache.mark_sync_failed($1, $2)`, [syncId, err.message?.slice(0, 4000)]);
+    await query(
+      `update cache.sync_runs set status = 'failed', notes = $1, finished_at = now() where id = $2`,
+      [err.message?.slice(0, 4000), syncId]
+    );
     throw err;
   }
 }
@@ -70,18 +77,24 @@ export async function POST(request, context) {
   }
 
   const { fixtureId } = await context.params;
-
   if (!/^\d+$/.test(String(fixtureId))) {
     return NextResponse.json({ ok: false, error: "Invalid fixtureId" }, { status: 400 });
   }
 
+  // ?filter=markets:1,2,45
+  const { searchParams } = new URL(request.url);
+  const filterParam = searchParams.get("filter") ?? null;
+
   try {
-    // TTL = 10 ثواني — الـ inplay بيتغير كتير
     const result = await staleWhileRevalidate({
       type:      "odds_inplay",
       getCached: () => getCached(Number(fixtureId)),
       refresh:   () => refresh(Number(fixtureId)),
     });
+
+    const data = filterParam
+      ? filterOddsPayload(result.data, filterParam)
+      : result.data;
 
     return NextResponse.json({
       ok:           true,
@@ -89,7 +102,8 @@ export async function POST(request, context) {
       bookmaker_id: BOOKMAKER_ID,
       source:       result.source,
       stale:        result.stale,
-      data:         result.data,
+      filtered_by:  filterParam ?? null,
+      data,
     });
   } catch (error) {
     return NextResponse.json(

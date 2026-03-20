@@ -72,150 +72,102 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA "extensions";
 
 
 
-CREATE OR REPLACE FUNCTION "cache"."finish_sync_fixtures"("p_fixture_id" bigint, "p_sync_run_id" "uuid") RETURNS "void"
-    LANGUAGE "plpgsql" SECURITY DEFINER
+CREATE OR REPLACE FUNCTION "cache"."finish_sync_fixtures"("p_fixture_id" bigint, "p_sync_id" bigint) RETURNS "void"
+    LANGUAGE "plpgsql"
     AS $$
 begin
-  delete from cache.fixtures_raw
-  where fixture_id = p_fixture_id
-    and sync_run_id is distinct from p_sync_run_id;
-
-  update cache.sync_runs
-  set status = 'done', finished_at = now()
-  where id = p_sync_run_id;
+  update cache.sync_runs set status = 'done', finished_at = now() where id = p_sync_id;
 end;
 $$;
 
 
-ALTER FUNCTION "cache"."finish_sync_fixtures"("p_fixture_id" bigint, "p_sync_run_id" "uuid") OWNER TO "postgres";
+ALTER FUNCTION "cache"."finish_sync_fixtures"("p_fixture_id" bigint, "p_sync_id" bigint) OWNER TO "postgres";
 
 
-CREATE OR REPLACE FUNCTION "cache"."finish_sync_h2h"("p_home_team_id" bigint, "p_away_team_id" bigint, "p_sync_run_id" "uuid") RETURNS "void"
-    LANGUAGE "plpgsql" SECURITY DEFINER
+CREATE OR REPLACE FUNCTION "cache"."finish_sync_h2h"("p_home" bigint, "p_away" bigint, "p_sync_id" bigint) RETURNS "void"
+    LANGUAGE "plpgsql"
     AS $$
 begin
-  delete from cache.fixtures_head_to_head_raw
-  where home_team_id = p_home_team_id
-    and away_team_id = p_away_team_id
-    and sync_run_id is distinct from p_sync_run_id;
-
-  update cache.sync_runs
-  set status = 'done', finished_at = now()
-  where id = p_sync_run_id;
+  update cache.sync_runs set status = 'done', finished_at = now() where id = p_sync_id;
 end;
 $$;
 
 
-ALTER FUNCTION "cache"."finish_sync_h2h"("p_home_team_id" bigint, "p_away_team_id" bigint, "p_sync_run_id" "uuid") OWNER TO "postgres";
+ALTER FUNCTION "cache"."finish_sync_h2h"("p_home" bigint, "p_away" bigint, "p_sync_id" bigint) OWNER TO "postgres";
 
 
-CREATE OR REPLACE FUNCTION "cache"."finish_sync_odds_inplay"("p_fixture_id" bigint, "p_bookmaker_id" integer, "p_sync_run_id" "uuid") RETURNS "void"
-    LANGUAGE "plpgsql" SECURITY DEFINER
+CREATE OR REPLACE FUNCTION "cache"."finish_sync_odds_inplay"("p_fixture_id" bigint, "p_bookmaker_id" integer, "p_sync_id" bigint) RETURNS "void"
+    LANGUAGE "plpgsql"
     AS $$
 begin
-  delete from cache.odds_inplay_fixtures_bookmakers_35_raw
-  where fixture_id = p_fixture_id
-    and bookmaker_id = p_bookmaker_id
-    and sync_run_id is distinct from p_sync_run_id;
-
-  update cache.sync_runs
-  set status = 'done', finished_at = now()
-  where id = p_sync_run_id;
+  update cache.sync_runs set status = 'done', finished_at = now() where id = p_sync_id;
 end;
 $$;
 
 
-ALTER FUNCTION "cache"."finish_sync_odds_inplay"("p_fixture_id" bigint, "p_bookmaker_id" integer, "p_sync_run_id" "uuid") OWNER TO "postgres";
+ALTER FUNCTION "cache"."finish_sync_odds_inplay"("p_fixture_id" bigint, "p_bookmaker_id" integer, "p_sync_id" bigint) OWNER TO "postgres";
 
 
-CREATE OR REPLACE FUNCTION "cache"."finish_sync_odds_markets"("p_sync_run_id" "uuid") RETURNS "void"
-    LANGUAGE "plpgsql" SECURITY DEFINER
+CREATE OR REPLACE FUNCTION "cache"."finish_sync_odds_markets"("p_sync_id" bigint) RETURNS "void"
+    LANGUAGE "plpgsql"
     AS $$
 begin
-  delete from cache.odds_markets_raw
-  where sync_run_id is distinct from p_sync_run_id;
-
-  perform cache.rebuild_odds_markets_index();
-
-  update cache.sync_runs
-  set status = 'done', finished_at = now()
-  where id = p_sync_run_id;
+  update cache.sync_runs set status = 'done', finished_at = now() where id = p_sync_id;
 end;
 $$;
 
 
-ALTER FUNCTION "cache"."finish_sync_odds_markets"("p_sync_run_id" "uuid") OWNER TO "postgres";
+ALTER FUNCTION "cache"."finish_sync_odds_markets"("p_sync_id" bigint) OWNER TO "postgres";
 
 
-CREATE OR REPLACE FUNCTION "cache"."finish_sync_odds_prematch"("p_fixture_id" bigint, "p_bookmaker_id" integer, "p_sync_run_id" "uuid") RETURNS "void"
-    LANGUAGE "plpgsql" SECURITY DEFINER
+CREATE OR REPLACE FUNCTION "cache"."finish_sync_odds_prematch"("p_fixture_id" bigint, "p_bookmaker_id" integer, "p_sync_id" bigint) RETURNS "void"
+    LANGUAGE "plpgsql"
     AS $$
 begin
-  delete from cache.odds_prematch_fixtures_bookmakers_35_raw
-  where fixture_id = p_fixture_id
-    and bookmaker_id = p_bookmaker_id
-    and sync_run_id is distinct from p_sync_run_id;
-
-  update cache.sync_runs
-  set status = 'done', finished_at = now()
-  where id = p_sync_run_id;
+  update cache.sync_runs set status = 'done', finished_at = now() where id = p_sync_id;
 end;
 $$;
 
 
-ALTER FUNCTION "cache"."finish_sync_odds_prematch"("p_fixture_id" bigint, "p_bookmaker_id" integer, "p_sync_run_id" "uuid") OWNER TO "postgres";
+ALTER FUNCTION "cache"."finish_sync_odds_prematch"("p_fixture_id" bigint, "p_bookmaker_id" integer, "p_sync_id" bigint) OWNER TO "postgres";
 
 
-CREATE OR REPLACE FUNCTION "cache"."finish_sync_referee_stats"("p_referee_id" bigint, "p_sync_run_id" "uuid") RETURNS "void"
-    LANGUAGE "plpgsql" SECURITY DEFINER
+CREATE OR REPLACE FUNCTION "cache"."finish_sync_referee_stats"("p_referee_id" bigint, "p_sync_id" bigint) RETURNS "void"
+    LANGUAGE "plpgsql"
     AS $$
 begin
-  delete from cache.statistics_seasons_referees_raw
-  where referee_id = p_referee_id
-    and sync_run_id is distinct from p_sync_run_id;
-
-  update cache.sync_runs
-  set status = 'done', finished_at = now()
-  where id = p_sync_run_id;
+  update cache.sync_runs set status = 'done', finished_at = now() where id = p_sync_id;
 end;
 $$;
 
 
-ALTER FUNCTION "cache"."finish_sync_referee_stats"("p_referee_id" bigint, "p_sync_run_id" "uuid") OWNER TO "postgres";
+ALTER FUNCTION "cache"."finish_sync_referee_stats"("p_referee_id" bigint, "p_sync_id" bigint) OWNER TO "postgres";
 
 
-CREATE OR REPLACE FUNCTION "cache"."finish_sync_team_stats"("p_team_id" bigint, "p_sync_run_id" "uuid") RETURNS "void"
-    LANGUAGE "plpgsql" SECURITY DEFINER
+CREATE OR REPLACE FUNCTION "cache"."finish_sync_team_stats"("p_team_id" bigint, "p_sync_id" bigint) RETURNS "void"
+    LANGUAGE "plpgsql"
     AS $$
 begin
-  delete from cache.statistics_seasons_teams_raw
-  where team_id = p_team_id
-    and sync_run_id is distinct from p_sync_run_id;
-
-  update cache.sync_runs
-  set status = 'done', finished_at = now()
-  where id = p_sync_run_id;
+  update cache.sync_runs set status = 'done', finished_at = now() where id = p_sync_id;
 end;
 $$;
 
 
-ALTER FUNCTION "cache"."finish_sync_team_stats"("p_team_id" bigint, "p_sync_run_id" "uuid") OWNER TO "postgres";
+ALTER FUNCTION "cache"."finish_sync_team_stats"("p_team_id" bigint, "p_sync_id" bigint) OWNER TO "postgres";
 
 
-CREATE OR REPLACE FUNCTION "cache"."mark_sync_failed"("p_sync_run_id" "uuid", "p_notes" "text" DEFAULT NULL::"text") RETURNS "void"
-    LANGUAGE "plpgsql" SECURITY DEFINER
+CREATE OR REPLACE FUNCTION "cache"."mark_sync_failed"("p_id" bigint, "p_error" "text") RETURNS "void"
+    LANGUAGE "plpgsql"
     AS $$
 begin
   update cache.sync_runs
-  set status = 'failed',
-      finished_at = now(),
-      notes = coalesce(p_notes, notes)
-  where id = p_sync_run_id;
+  set status = 'failed', error = p_error, finished_at = now()
+  where id = p_id;
 end;
 $$;
 
 
-ALTER FUNCTION "cache"."mark_sync_failed"("p_sync_run_id" "uuid", "p_notes" "text") OWNER TO "postgres";
+ALTER FUNCTION "cache"."mark_sync_failed"("p_id" bigint, "p_error" "text") OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "cache"."purge_stale_cache"() RETURNS "void"
@@ -305,22 +257,20 @@ $$;
 ALTER FUNCTION "cache"."rebuild_odds_markets_index"() OWNER TO "postgres";
 
 
-CREATE OR REPLACE FUNCTION "cache"."start_sync"("p_target_table" "text", "p_scope_key" "text") RETURNS "uuid"
-    LANGUAGE "plpgsql" SECURITY DEFINER
+CREATE OR REPLACE FUNCTION "cache"."start_sync"("p_table" "text", "p_key" "text") RETURNS bigint
+    LANGUAGE "plpgsql"
     AS $$
-declare
-  v_sync_id uuid;
+declare v_id bigint;
 begin
-  insert into cache.sync_runs (target_table, scope_key)
-  values (p_target_table, p_scope_key)
-  returning id into v_sync_id;
-
-  return v_sync_id;
+  insert into cache.sync_runs (table_name, entity_key, status)
+  values (p_table, p_key, 'running')
+  returning id into v_id;
+  return v_id;
 end;
 $$;
 
 
-ALTER FUNCTION "cache"."start_sync"("p_target_table" "text", "p_scope_key" "text") OWNER TO "postgres";
+ALTER FUNCTION "cache"."start_sync"("p_table" "text", "p_key" "text") OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "util"."normalize_text"("p_text" "text") RETURNS "text"
@@ -893,5 +843,8 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TAB
 
 
 
+
+
+drop extension if exists "pg_net";
 
 
