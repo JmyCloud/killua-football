@@ -52,14 +52,25 @@ async function refresh(fixtureId) {
            pagination  = excluded.pagination,
            fetched_at  = excluded.fetched_at,
            sync_run_id = excluded.sync_run_id`,
-        [fixtureId, BOOKMAKER_ID, page.page_number,
-         JSON.stringify(page.payload), JSON.stringify(page.pagination), syncId]
+        [
+          fixtureId,
+          BOOKMAKER_ID,
+          page.page_number,
+          JSON.stringify(page.payload),
+          JSON.stringify(page.pagination),
+          syncId,
+        ]
       );
     }
 
     await query(
       `update cache.sync_runs set status = 'done', finished_at = now() where id = $1`,
       [syncId]
+    );
+
+    await query(
+      `select cache.rebuild_odds_prematch_index($1)`,
+      [fixtureId]
     );
   } catch (err) {
     await query(
@@ -80,15 +91,14 @@ export async function POST(request, context) {
     return NextResponse.json({ ok: false, error: "Invalid fixtureId" }, { status: 400 });
   }
 
-  // ?filter=markets:1,2,45
   const { searchParams } = new URL(request.url);
   const filterParam = searchParams.get("filter") ?? null;
 
   try {
     const result = await staleWhileRevalidate({
-      type:      "odds_prematch",
+      type: "odds_prematch",
       getCached: () => getCached(Number(fixtureId)),
-      refresh:   () => refresh(Number(fixtureId)),
+      refresh: () => refresh(Number(fixtureId)),
     });
 
     const data = filterParam
@@ -96,12 +106,12 @@ export async function POST(request, context) {
       : result.data;
 
     return NextResponse.json({
-      ok:           true,
-      fixture_id:   Number(fixtureId),
+      ok: true,
+      fixture_id: Number(fixtureId),
       bookmaker_id: BOOKMAKER_ID,
-      source:       result.source,
-      stale:        result.stale,
-      filtered_by:  filterParam ?? null,
+      source: result.source,
+      stale: result.stale,
+      filtered_by: filterParam ?? null,
       data,
     });
   } catch (error) {

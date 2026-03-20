@@ -53,14 +53,24 @@ async function refresh(refereeId) {
            fetched_at  = excluded.fetched_at,
            sync_run_id = excluded.sync_run_id,
            updated_at  = now()`,
-        [refereeId, page.page_number,
-         JSON.stringify(page.payload), JSON.stringify(page.pagination), syncId]
+        [
+          refereeId,
+          page.page_number,
+          JSON.stringify(page.payload),
+          JSON.stringify(page.pagination),
+          syncId,
+        ]
       );
     }
 
     await query(
       `update cache.sync_runs set status = 'done', finished_at = now() where id = $1`,
       [syncId]
+    );
+
+    await query(
+      `select cache.rebuild_referee_stats_index($1)`,
+      [refereeId]
     );
   } catch (err) {
     await query(
@@ -83,17 +93,17 @@ export async function POST(request, context) {
 
   try {
     const result = await staleWhileRevalidate({
-      type:      "referee_season_stats",
+      type: "referee_season_stats",
       getCached: () => getCached(Number(refereeId)),
-      refresh:   () => refresh(Number(refereeId)),
+      refresh: () => refresh(Number(refereeId)),
     });
 
     return NextResponse.json({
-      ok:         true,
+      ok: true,
       referee_id: Number(refereeId),
-      source:     result.source,
-      stale:      result.stale,
-      data:       result.data,
+      source: result.source,
+      stale: result.stale,
+      data: result.data,
     });
   } catch (error) {
     return NextResponse.json(

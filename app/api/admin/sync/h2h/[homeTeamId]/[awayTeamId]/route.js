@@ -10,7 +10,7 @@ const INCLUDE =
   "league;season;stage;round;group;aggregate;venue;state;participants;scores.type;events.type;statistics.type;referees.referee;referees.type";
 
 const DEFAULT_LIMIT = 5;
-const MAX_LIMIT     = 50;
+const MAX_LIMIT = 50;
 
 function isAuthorized(request) {
   const expected = process.env.PROXY_SHARED_SECRET;
@@ -19,7 +19,6 @@ function isAuthorized(request) {
   return provided === expected;
 }
 
-// ─── parse ?limit=N ───────────────────────────────────────────────────────────
 function parseLimit(searchParams) {
   const raw = searchParams.get("limit");
   if (!raw) return DEFAULT_LIMIT;
@@ -28,23 +27,17 @@ function parseLimit(searchParams) {
   return Math.min(n, MAX_LIMIT);
 }
 
-// ─── فلترة أحدث N مباراة من كل الـ pages ─────────────────────────────────────
 function applyLimit(cachedData, limit) {
-  // cachedData هو payload كامل من Supabase (page واحدة أو أكثر محتملة)
   const raw = cachedData?.data ?? cachedData;
-
-  // لو فيه data array مباشرة
   const matches = Array.isArray(raw?.data) ? raw.data : [];
-
-  // البيانات جاية مرتبة desc من SportMonks → أخد أول N فقط
   const sliced = matches.slice(0, limit);
 
   return {
     ...raw,
-    data:  sliced,
+    data: sliced,
     _meta: {
       total_available: matches.length,
-      returned:        sliced.length,
+      returned: sliced.length,
       limit,
     },
   };
@@ -68,6 +61,7 @@ async function refresh(homeTeamId, awayTeamId) {
      values ($1, $2, 'running') returning id`,
     ["fixtures_head_to_head_raw", `home:${homeTeamId}:away:${awayTeamId}`]
   );
+
   const syncId = syncResult.rows[0]?.id;
   if (!syncId) throw new Error("Failed to create sync run");
 
@@ -75,11 +69,11 @@ async function refresh(homeTeamId, awayTeamId) {
     const pages = await fetchAllSportMonksPages(
       `fixtures/head-to-head/${homeTeamId}/${awayTeamId}`,
       {
-        include:  INCLUDE,
+        include: INCLUDE,
         per_page: 50,
-        page:     1,
-        sortBy:   "starting_at",   // ← أحدث مباراة أولاً
-        order:    "desc",
+        page: 1,
+        sortBy: "starting_at",
+        order: "desc",
       }
     );
 
@@ -94,14 +88,25 @@ async function refresh(homeTeamId, awayTeamId) {
            fetched_at  = excluded.fetched_at,
            sync_run_id = excluded.sync_run_id,
            updated_at  = now()`,
-        [homeTeamId, awayTeamId, page.page_number,
-         JSON.stringify(page.payload), JSON.stringify(page.pagination), syncId]
+        [
+          homeTeamId,
+          awayTeamId,
+          page.page_number,
+          JSON.stringify(page.payload),
+          JSON.stringify(page.pagination),
+          syncId,
+        ]
       );
     }
 
     await query(
       `update cache.sync_runs set status = 'done', finished_at = now() where id = $1`,
       [syncId]
+    );
+
+    await query(
+      `select cache.rebuild_h2h_index($1, $2)`,
+      [homeTeamId, awayTeamId]
     );
   } catch (err) {
     await query(
@@ -127,19 +132,19 @@ export async function POST(request, context) {
 
   try {
     const result = await staleWhileRevalidate({
-      type:      "fixtures_h2h",
+      type: "fixtures_h2h",
       getCached: () => getCached(Number(homeTeamId), Number(awayTeamId)),
-      refresh:   () => refresh(Number(homeTeamId), Number(awayTeamId)),
+      refresh: () => refresh(Number(homeTeamId), Number(awayTeamId)),
     });
 
     const data = applyLimit(result.data, limit);
 
     return NextResponse.json({
-      ok:           true,
+      ok: true,
       home_team_id: Number(homeTeamId),
       away_team_id: Number(awayTeamId),
-      source:       result.source,
-      stale:        result.stale,
+      source: result.source,
+      stale: result.stale,
       limit,
       data,
     });

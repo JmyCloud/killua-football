@@ -34,6 +34,7 @@ async function refresh(fixtureId) {
      values ($1, $2, 'running') returning id`,
     ["fixtures_raw", `fixture:${fixtureId}`]
   );
+
   const syncId = syncResult.rows[0]?.id;
   if (!syncId) throw new Error("Failed to create sync run");
 
@@ -46,7 +47,9 @@ async function refresh(fixtureId) {
     if (!resolvedFixtureId) throw new Error("Fixture payload missing data.id");
 
     await query(
-      `insert into cache.fixtures_raw (fixture_id, page_number, payload, pagination, fetched_at, sync_run_id)
+      `insert into cache.fixtures_raw (
+         fixture_id, page_number, payload, pagination, fetched_at, sync_run_id
+       )
        values ($1, $2, $3::jsonb, $4::jsonb, now(), $5)
        on conflict (fixture_id, page_number) do update set
          payload     = excluded.payload,
@@ -54,16 +57,32 @@ async function refresh(fixtureId) {
          fetched_at  = excluded.fetched_at,
          sync_run_id = excluded.sync_run_id,
          updated_at  = now()`,
-      [resolvedFixtureId, 1, JSON.stringify(payload), JSON.stringify(payload?.pagination ?? null), syncId]
+      [
+        resolvedFixtureId,
+        1,
+        JSON.stringify(payload),
+        JSON.stringify(payload?.pagination ?? null),
+        syncId,
+      ]
+    );
+
+    // rebuild the fixture index immediately after sync
+    await query(
+      `select cache.rebuild_fixture_index($1)`,
+      [resolvedFixtureId]
     );
 
     await query(
-      `update cache.sync_runs set status = 'done', finished_at = now() where id = $1`,
+      `update cache.sync_runs
+       set status = 'done', finished_at = now()
+       where id = $1`,
       [syncId]
     );
   } catch (err) {
     await query(
-      `update cache.sync_runs set status = 'failed', notes = $1, finished_at = now() where id = $2`,
+      `update cache.sync_runs
+       set status = 'failed', notes = $1, finished_at = now()
+       where id = $2`,
       [err.message?.slice(0, 4000), syncId]
     );
     throw err;
