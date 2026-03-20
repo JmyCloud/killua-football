@@ -9,11 +9,45 @@ export const dynamic = "force-dynamic";
 const INCLUDE =
   "league;season;stage;round;group;aggregate;venue;state;participants;scores.type;events.type;statistics.type;referees.referee;referees.type";
 
+const DEFAULT_LIMIT = 5;
+const MAX_LIMIT     = 50;
+
 function isAuthorized(request) {
   const expected = process.env.PROXY_SHARED_SECRET;
   const provided = request.headers.get("x-admin-secret");
   if (!expected) throw new Error("Missing PROXY_SHARED_SECRET");
   return provided === expected;
+}
+
+// ─── parse ?limit=N ───────────────────────────────────────────────────────────
+function parseLimit(searchParams) {
+  const raw = searchParams.get("limit");
+  if (!raw) return DEFAULT_LIMIT;
+  const n = parseInt(raw, 10);
+  if (!Number.isInteger(n) || n < 1) return DEFAULT_LIMIT;
+  return Math.min(n, MAX_LIMIT);
+}
+
+// ─── فلترة أحدث N مباراة من كل الـ pages ─────────────────────────────────────
+function applyLimit(cachedData, limit) {
+  // cachedData هو payload كامل من Supabase (page واحدة أو أكثر محتملة)
+  const raw = cachedData?.data ?? cachedData;
+
+  // لو فيه data array مباشرة
+  const matches = Array.isArray(raw?.data) ? raw.data : [];
+
+  // البيانات جاية مرتبة desc من SportMonks → أخد أول N فقط
+  const sliced = matches.slice(0, limit);
+
+  return {
+    ...raw,
+    data:  sliced,
+    _meta: {
+      total_available: matches.length,
+      returned:        sliced.length,
+      limit,
+    },
+  };
 }
 
 async function getCached(homeTeamId, awayTeamId) {
@@ -40,7 +74,13 @@ async function refresh(homeTeamId, awayTeamId) {
   try {
     const pages = await fetchAllSportMonksPages(
       `fixtures/head-to-head/${homeTeamId}/${awayTeamId}`,
-      { include: INCLUDE, per_page: 50, page: 1 }
+      {
+        include:  INCLUDE,
+        per_page: 50,
+        page:     1,
+        sort:   "-starting_at",   // ← أحدث مباراة أولاً
+        order:    "desc",
+      }
     );
 
     for (const page of pages) {
@@ -82,6 +122,9 @@ export async function POST(request, context) {
     return NextResponse.json({ ok: false, error: "Invalid team IDs" }, { status: 400 });
   }
 
+  const { searchParams } = new URL(request.url);
+  const limit = parseLimit(searchParams);
+
   try {
     const result = await staleWhileRevalidate({
       type:      "fixtures_h2h",
@@ -89,13 +132,16 @@ export async function POST(request, context) {
       refresh:   () => refresh(Number(homeTeamId), Number(awayTeamId)),
     });
 
+    const data = applyLimit(result.data, limit);
+
     return NextResponse.json({
       ok:           true,
       home_team_id: Number(homeTeamId),
       away_team_id: Number(awayTeamId),
       source:       result.source,
       stale:        result.stale,
-      data:         result.data,
+      limit,
+      data,
     });
   } catch (error) {
     return NextResponse.json(
