@@ -30,10 +30,11 @@ async function getCached(fixtureId) {
 
 async function refresh(fixtureId) {
   const syncResult = await query(
-    `select cache.start_sync($1, $2) as sync_id`,
-    ["fixtures_raw", "football"]
+    `insert into cache.sync_runs (target_table, scope_key, status)
+     values ($1, $2, 'running') returning id`,
+    ["fixtures_raw", `fixture:${fixtureId}`]
   );
-  const syncId = syncResult.rows[0]?.sync_id;
+  const syncId = syncResult.rows[0]?.id;
   if (!syncId) throw new Error("Failed to create sync run");
 
   try {
@@ -56,9 +57,15 @@ async function refresh(fixtureId) {
       [resolvedFixtureId, 1, JSON.stringify(payload), JSON.stringify(payload?.pagination ?? null), syncId]
     );
 
-    await query(`select cache.finish_sync_fixtures($1, $2)`, [resolvedFixtureId, syncId]);
+    await query(
+      `update cache.sync_runs set status = 'done', finished_at = now() where id = $1`,
+      [syncId]
+    );
   } catch (err) {
-    await query(`select cache.mark_sync_failed($1, $2)`, [syncId, err.message?.slice(0, 4000)]);
+    await query(
+      `update cache.sync_runs set status = 'failed', notes = $1, finished_at = now() where id = $2`,
+      [err.message?.slice(0, 4000), syncId]
+    );
     throw err;
   }
 }
@@ -69,7 +76,6 @@ export async function POST(request, context) {
   }
 
   const { fixtureId } = await context.params;
-
   if (!/^\d+$/.test(String(fixtureId))) {
     return NextResponse.json({ ok: false, error: "Invalid fixtureId" }, { status: 400 });
   }
@@ -84,8 +90,8 @@ export async function POST(request, context) {
     return NextResponse.json({
       ok:         true,
       fixture_id: Number(fixtureId),
-      source:     result.source,   // "cache" أو "sportmonks"
-      stale:      result.stale,    // true = كانت قديمة وبيتجدد في الـ background
+      source:     result.source,
+      stale:      result.stale,
       data:       result.data,
     });
   } catch (error) {

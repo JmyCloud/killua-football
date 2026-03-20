@@ -30,10 +30,11 @@ async function getCached(homeTeamId, awayTeamId) {
 
 async function refresh(homeTeamId, awayTeamId) {
   const syncResult = await query(
-    `select cache.start_sync($1, $2) as sync_id`,
+    `insert into cache.sync_runs (target_table, scope_key, status)
+     values ($1, $2, 'running') returning id`,
     ["fixtures_head_to_head_raw", `home:${homeTeamId}:away:${awayTeamId}`]
   );
-  const syncId = syncResult.rows[0]?.sync_id;
+  const syncId = syncResult.rows[0]?.id;
   if (!syncId) throw new Error("Failed to create sync run");
 
   try {
@@ -53,13 +54,20 @@ async function refresh(homeTeamId, awayTeamId) {
            fetched_at  = excluded.fetched_at,
            sync_run_id = excluded.sync_run_id,
            updated_at  = now()`,
-        [homeTeamId, awayTeamId, page.page_number, JSON.stringify(page.payload), JSON.stringify(page.pagination), syncId]
+        [homeTeamId, awayTeamId, page.page_number,
+         JSON.stringify(page.payload), JSON.stringify(page.pagination), syncId]
       );
     }
 
-    await query(`select cache.finish_sync_h2h($1, $2, $3)`, [homeTeamId, awayTeamId, syncId]);
+    await query(
+      `update cache.sync_runs set status = 'done', finished_at = now() where id = $1`,
+      [syncId]
+    );
   } catch (err) {
-    await query(`select cache.mark_sync_failed($1, $2)`, [syncId, err.message?.slice(0, 4000)]);
+    await query(
+      `update cache.sync_runs set status = 'failed', notes = $1, finished_at = now() where id = $2`,
+      [err.message?.slice(0, 4000), syncId]
+    );
     throw err;
   }
 }
@@ -70,7 +78,6 @@ export async function POST(request, context) {
   }
 
   const { homeTeamId, awayTeamId } = await context.params;
-
   if (!/^\d+$/.test(String(homeTeamId)) || !/^\d+$/.test(String(awayTeamId))) {
     return NextResponse.json({ ok: false, error: "Invalid team IDs" }, { status: 400 });
   }
