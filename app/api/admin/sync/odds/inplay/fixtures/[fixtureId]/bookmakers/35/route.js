@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { fetchAllSportMonksPages } from "@/lib/sportmonks";
-import { staleWhileRevalidate, filterOddsPayload } from "@/lib/cache";
+import { staleWhileRevalidate } from "@/lib/cache";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -92,9 +92,6 @@ export async function POST(request, context) {
     return NextResponse.json({ ok: false, error: "Invalid fixtureId" }, { status: 400 });
   }
 
-  const { searchParams } = new URL(request.url);
-  const filterParam = searchParams.get("filter") ?? null;
-
   try {
     const result = await staleWhileRevalidate({
       type: "odds_inplay",
@@ -102,18 +99,17 @@ export async function POST(request, context) {
       refresh: () => refresh(Number(fixtureId)),
     });
 
-    const data = filterParam
-      ? filterOddsPayload(result.data, filterParam)
-      : result.data;
-
     return NextResponse.json({
       ok: true,
       fixture_id: Number(fixtureId),
       bookmaker_id: BOOKMAKER_ID,
       source: result.source,
       stale: result.stale,
-      filtered_by: filterParam ?? null,
-      data,
+      synced: true,
+      next: {
+        read_from: `/api/admin/index/odds/inplay/${fixtureId}`,
+        search_markets_from: `/api/admin/markets`,
+      },
     });
   } catch (error) {
     return NextResponse.json(

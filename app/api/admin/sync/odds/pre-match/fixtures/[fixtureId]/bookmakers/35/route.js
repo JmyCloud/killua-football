@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { fetchAllSportMonksPages } from "@/lib/sportmonks";
-import { staleWhileRevalidate, filterOddsPayload } from "@/lib/cache";
+import { staleWhileRevalidate } from "@/lib/cache";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const BOOKMAKER_ID = 35;
+const INCLUDE = "market";
 
 function isAuthorized(request) {
   const expected = process.env.PROXY_SHARED_SECRET;
@@ -37,11 +38,10 @@ async function refresh(fixtureId) {
   if (!syncId) throw new Error("Failed to create sync run");
 
   try {
-    const pages = await fetchAllSportMonksPages(
-      `odds/pre-match/fixtures/${fixtureId}/bookmakers/${BOOKMAKER_ID}`,
-      { per_page: 50, page: 1 }
-    );
-
+const pages = await fetchAllSportMonksPages(
+  `odds/pre-match/fixtures/${fixtureId}/bookmakers/${BOOKMAKER_ID}`,
+  { include: INCLUDE, per_page: 50, page: 1 }
+);
     for (const page of pages) {
       await query(
         `insert into cache.odds_prematch_fixtures_bookmakers_35_raw
@@ -91,9 +91,6 @@ export async function POST(request, context) {
     return NextResponse.json({ ok: false, error: "Invalid fixtureId" }, { status: 400 });
   }
 
-  const { searchParams } = new URL(request.url);
-  const filterParam = searchParams.get("filter") ?? null;
-
   try {
     const result = await staleWhileRevalidate({
       type: "odds_prematch",
@@ -101,18 +98,17 @@ export async function POST(request, context) {
       refresh: () => refresh(Number(fixtureId)),
     });
 
-    const data = filterParam
-      ? filterOddsPayload(result.data, filterParam)
-      : result.data;
-
     return NextResponse.json({
       ok: true,
       fixture_id: Number(fixtureId),
       bookmaker_id: BOOKMAKER_ID,
       source: result.source,
       stale: result.stale,
-      filtered_by: filterParam ?? null,
-      data,
+      synced: true,
+      next: {
+        read_from: `/api/admin/index/odds/pre-match/${fixtureId}`,
+        search_markets_from: `/api/admin/markets`,
+      },
     });
   } catch (error) {
     return NextResponse.json(

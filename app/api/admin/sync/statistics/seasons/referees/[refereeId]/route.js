@@ -103,7 +103,10 @@ export async function POST(request, context) {
       referee_id: Number(refereeId),
       source: result.source,
       stale: result.stale,
-      data: result.data,
+      synced: true,
+      next: {
+        read_from: `/api/admin/index/statistics/referees/${refereeId}?season_id=current`,
+      },
     });
   } catch (error) {
     return NextResponse.json(

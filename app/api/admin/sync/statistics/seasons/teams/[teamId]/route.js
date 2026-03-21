@@ -103,7 +103,10 @@ export async function POST(request, context) {
       team_id: Number(teamId),
       source: result.source,
       stale: result.stale,
-      data: result.data,
+      synced: true,
+      next: {
+        read_from: `/api/admin/index/statistics/teams/${teamId}?season_id=current`,
+      },
     });
   } catch (error) {
     return NextResponse.json(

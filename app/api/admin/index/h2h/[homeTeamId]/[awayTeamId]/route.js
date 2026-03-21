@@ -1,15 +1,23 @@
 import { NextResponse } from "next/server";
-import { query } from "@/lib/db";
+import {
+  getH2HChunkRows,
+  normalizeH2HPair,
+} from "@/lib/analysis";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const VALID_CHUNKS = new Set([
-  "summary","participants","events","scores","statistics","referees"
+  "summary",
+  "participants",
+  "events",
+  "scores",
+  "statistics",
+  "referees",
 ]);
 
 const DEFAULT_LIMIT = 5;
-const MAX_LIMIT     = 50;
+const MAX_LIMIT = 50;
 
 function isAuthorized(request) {
   const expected = process.env.PROXY_SHARED_SECRET;
@@ -26,6 +34,14 @@ function parseLimit(searchParams) {
   return Math.min(n, MAX_LIMIT);
 }
 
+function parseExcludeFixtureId(searchParams) {
+  const raw = searchParams.get("exclude_fixture_id");
+  if (!raw) return null;
+  const n = parseInt(raw, 10);
+  if (!Number.isInteger(n) || n < 1) return null;
+  return n;
+}
+
 export async function GET(request, context) {
   if (!isAuthorized(request)) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
@@ -39,58 +55,63 @@ export async function GET(request, context) {
   const { searchParams } = new URL(request.url);
   const chunk = searchParams.get("chunk");
   const limit = parseLimit(searchParams);
+  const excludeFixtureId = parseExcludeFixtureId(searchParams);
 
   if (!chunk || !VALID_CHUNKS.has(chunk)) {
-    return NextResponse.json({
-      ok: false,
-      error: `Invalid chunk. Valid: ${[...VALID_CHUNKS].join(", ")}`,
-    }, { status: 400 });
+    return NextResponse.json(
+      {
+        ok: false,
+        error: `Invalid chunk. Valid: ${[...VALID_CHUNKS].join(", ")}`,
+      },
+      { status: 400 }
+    );
   }
 
   try {
-    // جيب أحدث N fixture_ids لهذا الـ pair
-    const fixtureIds = await query(
-      `select distinct fixture_id
-       from cache.fixtures_h2h_index
-       where home_team_id = $1 and away_team_id = $2 and chunk = 'summary'
-       order by fixture_id desc
-       limit $3`,
-      [Number(homeTeamId), Number(awayTeamId), limit]
-    );
+    const pair = normalizeH2HPair(Number(homeTeamId), Number(awayTeamId));
 
-    if (!fixtureIds.rows.length) {
-      return NextResponse.json({
-        ok: false,
-        error: `No H2H data found for ${homeTeamId} vs ${awayTeamId}. Run syncH2H first.`,
-      }, { status: 404 });
-    }
-
-    const ids = fixtureIds.rows.map(r => r.fixture_id);
-
-    // جيب الـ chunk المطلوب لكل fixture
-    const result = await query(
-      `select fixture_id, payload, fetched_at
-       from cache.fixtures_h2h_index
-       where home_team_id = $1
-         and away_team_id = $2
-         and chunk = $3
-         and fixture_id = ANY($4::bigint[])
-       order by fixture_id desc`,
-      [Number(homeTeamId), Number(awayTeamId), chunk, ids]
-    );
-
-    return NextResponse.json({
-      ok:           true,
-      home_team_id: Number(homeTeamId),
-      away_team_id: Number(awayTeamId),
+    const rows = await getH2HChunkRows(
+      Number(homeTeamId),
+      Number(awayTeamId),
       chunk,
       limit,
-      total_returned: result.rows.length,
-      data: result.rows.map(r => ({
-        fixture_id: r.fixture_id,
-        fetched_at: r.fetched_at,
-        ...r.payload,
-      })),
+      excludeFixtureId
+    );
+
+    if (!rows.length) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: `No H2H data found for ${homeTeamId} vs ${awayTeamId}. Run syncH2H first.`,
+          requested_pair: {
+            home_team_id: Number(homeTeamId),
+            away_team_id: Number(awayTeamId),
+          },
+          normalized_pair: {
+            home_team_id: pair.home_team_id,
+            away_team_id: pair.away_team_id,
+          },
+        },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({
+      ok: true,
+      requested_pair: {
+        home_team_id: Number(homeTeamId),
+        away_team_id: Number(awayTeamId),
+      },
+      normalized_pair: {
+        home_team_id: pair.home_team_id,
+        away_team_id: pair.away_team_id,
+      },
+      chunk,
+      limit,
+      exclude_fixture_id: excludeFixtureId,
+      sort: "starting_at_desc_then_fixture_id_desc",
+      total_returned: rows.length,
+      data: rows,
     });
   } catch (error) {
     return NextResponse.json(

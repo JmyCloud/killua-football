@@ -66,7 +66,6 @@ async function refresh(fixtureId) {
       ]
     );
 
-    // rebuild the fixture index immediately after sync
     await query(
       `select cache.rebuild_fixture_index($1)`,
       [resolvedFixtureId]
@@ -101,17 +100,21 @@ export async function POST(request, context) {
 
   try {
     const result = await staleWhileRevalidate({
-      type:      "fixtures",
+      type: "fixtures",
       getCached: () => getCached(Number(fixtureId)),
-      refresh:   () => refresh(Number(fixtureId)),
+      refresh: () => refresh(Number(fixtureId)),
     });
 
     return NextResponse.json({
-      ok:         true,
+      ok: true,
       fixture_id: Number(fixtureId),
-      source:     result.source,
-      stale:      result.stale,
-      data:       result.data,
+      source: result.source,
+      stale: result.stale,
+      synced: true,
+      next: {
+        read_from: `/api/admin/index/fixtures/${fixtureId}`,
+        manifest_from: `/api/admin/analysis/fixtures/${fixtureId}/manifest`,
+      },
     });
   } catch (error) {
     return NextResponse.json(
