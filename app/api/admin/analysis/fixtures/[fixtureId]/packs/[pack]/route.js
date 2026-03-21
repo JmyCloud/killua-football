@@ -9,8 +9,10 @@ import {
   getCurrentRefereeStats,
   getOddsSummary,
   resolveFixtureActors,
-  getPackDetails,
-  summarizeChunkCoverage,
+  parsePackReadParams,
+  applySafeFixturePackRead,
+  applySafeH2HPackRead,
+  getPackSafeReadConfig,
 } from "@/lib/analysis";
 
 export const runtime = "nodejs";
@@ -24,6 +26,19 @@ function parseLimit(searchParams) {
   return Math.min(n, 20);
 }
 
+function buildSafeReadMeta(pack, readParams) {
+  const safe = getPackSafeReadConfig(pack);
+
+  return {
+    read_mode: readParams.read_mode,
+    safe_read: {
+      enabled: safe.enabled,
+      strategy: safe.strategy,
+      default_page_size: safe.default_page_size,
+      max_page_size: safe.max_page_size,
+    },
+  };
+}
 function basePackMeta(pack) {
   const details = getPackDetails(pack);
   return {
@@ -59,26 +74,37 @@ export async function GET(request, context) {
     const actors = await resolveFixtureActors(id);
     const { searchParams } = new URL(request.url);
     const limit = parseLimit(searchParams);
+    const readParams = parsePackReadParams(searchParams, pack);
     const meta = basePackMeta(pack);
 
-    if (
-      pack === "fixture_context" ||
-      pack === "fixture_squads" ||
-      pack === "fixture_events_scores" ||
-      pack === "fixture_statistics" ||
-      pack === "fixture_periods"
-    ) {
-      const chunks = getPackChunks(pack);
-      const data = await getFixtureChunksMap(id, chunks);
+if (
+  pack === "fixture_context" ||
+  pack === "fixture_squads" ||
+  pack === "fixture_events_scores" ||
+  pack === "fixture_statistics" ||
+  pack === "fixture_periods"
+) {
+  const chunks = getPackChunks(pack);
+  const data = await getFixtureChunksMap(id, chunks);
 
-      return NextResponse.json({
-        ok: true,
-        fixture_id: id,
-        ...meta,
-        coverage: summarizeChunkCoverage(chunks, data),
-        data,
-      });
-    }
+  const safeResult =
+    readParams.read_mode === "safe"
+      ? applySafeFixturePackRead(pack, data, readParams.page, readParams.page_size)
+      : { data, paging: null };
+
+  return NextResponse.json({
+    ok: true,
+    fixture_id: id,
+    pack,
+    ...buildSafeReadMeta(pack, readParams),
+    completeness: {
+      expected_chunks: chunks,
+      found_chunks: Object.keys(data),
+    },
+    paging: safeResult.paging,
+    data: safeResult.data,
+  });
+}
 
     if (pack === "h2h_context") {
       if (!actors.home_team_id || !actors.away_team_id) {
@@ -95,10 +121,20 @@ export async function GET(request, context) {
         getH2HChunkRows(actors.home_team_id, actors.away_team_id, "scores", limit, id),
       ]);
 
+      const rawData = {
+        summary,
+        participants,
+        scores,
+      };
+      const safeResult =
+        readParams.read_mode === "safe"
+          ? applySafeH2HPackRead(rawData, readParams.page, readParams.page_size)
+          : { data: rawData, paging: null };
       return NextResponse.json({
         ok: true,
         fixture_id: id,
-        ...meta,
+        pack,
+        ...buildSafeReadMeta(pack, readParams),
         limit,
         excluded_fixture_id: id,
         sort: "starting_at_desc_then_fixture_id_desc",
@@ -106,11 +142,8 @@ export async function GET(request, context) {
           home_team_id: actors.home_team_id,
           away_team_id: actors.away_team_id,
         },
-        data: {
-          summary,
-          participants,
-          scores,
-        },
+        paging: safeResult.paging,
+        data: safeResult.data,
       });
     }
 
@@ -131,10 +164,18 @@ export async function GET(request, context) {
         id
       );
 
+      const rawData = {
+        events,
+      };
+      const safeResult =
+        readParams.read_mode === "safe"
+          ? applySafeH2HPackRead(rawData, readParams.page, readParams.page_size)
+          : { data: rawData, paging: null };
       return NextResponse.json({
         ok: true,
         fixture_id: id,
-        ...meta,
+        pack,
+        ...buildSafeReadMeta(pack, readParams),
         limit,
         excluded_fixture_id: id,
         sort: "starting_at_desc_then_fixture_id_desc",
@@ -142,9 +183,8 @@ export async function GET(request, context) {
           home_team_id: actors.home_team_id,
           away_team_id: actors.away_team_id,
         },
-        data: {
-          events,
-        },
+        paging: safeResult.paging,
+        data: safeResult.data,
       });
     }
 
@@ -165,10 +205,18 @@ export async function GET(request, context) {
         id
       );
 
+      const rawData = {
+        statistics,
+      };
+      const safeResult =
+        readParams.read_mode === "safe"
+          ? applySafeH2HPackRead(rawData, readParams.page, readParams.page_size)
+          : { data: rawData, paging: null };
       return NextResponse.json({
         ok: true,
         fixture_id: id,
-        ...meta,
+        pack,
+        ...buildSafeReadMeta(pack, readParams),
         limit,
         excluded_fixture_id: id,
         sort: "starting_at_desc_then_fixture_id_desc",
@@ -176,9 +224,8 @@ export async function GET(request, context) {
           home_team_id: actors.home_team_id,
           away_team_id: actors.away_team_id,
         },
-        data: {
-          statistics,
-        },
+        paging: safeResult.paging,
+        data: safeResult.data,
       });
     }
 
@@ -199,10 +246,18 @@ export async function GET(request, context) {
         id
       );
 
+      const rawData = {
+        referees,
+      };
+      const safeResult =
+        readParams.read_mode === "safe"
+          ? applySafeH2HPackRead(rawData, readParams.page, readParams.page_size)
+          : { data: rawData, paging: null };
       return NextResponse.json({
         ok: true,
         fixture_id: id,
-        ...meta,
+        pack,
+        ...buildSafeReadMeta(pack, readParams),
         limit,
         excluded_fixture_id: id,
         sort: "starting_at_desc_then_fixture_id_desc",
@@ -210,9 +265,8 @@ export async function GET(request, context) {
           home_team_id: actors.home_team_id,
           away_team_id: actors.away_team_id,
         },
-        data: {
-          referees,
-        },
+        paging: safeResult.paging,
+        data: safeResult.data,
       });
     }
 
