@@ -10,13 +10,17 @@ const DEFAULT_STALE_RUNNING_MINUTES = 30;
 const DEFAULT_DELETE_SYNC_RUNS_DAYS = 14;
 const DEFAULT_DELETE_DISABLED_WATCHLIST_DAYS = 90;
 
-async function previewCounts({ staleRunningMinutes, deleteSyncRunsDays, deleteDisabledWatchlistDays }) {
+async function previewCounts({
+  staleRunningMinutes,
+  deleteSyncRunsDays,
+  deleteDisabledWatchlistDays,
+}) {
   const staleRunning = await query(
     `
     select count(*)::int as count
     from cache.sync_runs
     where status = 'running'
-      and created_at < now() - ($1 || ' minutes')::interval
+      and started_at < now() - ($1 || ' minutes')::interval
     `,
     [staleRunningMinutes]
   );
@@ -26,7 +30,7 @@ async function previewCounts({ staleRunningMinutes, deleteSyncRunsDays, deleteDi
     select count(*)::int as count
     from cache.sync_runs
     where status in ('done', 'failed')
-      and coalesce(finished_at, created_at) < now() - ($1 || ' days')::interval
+      and coalesce(finished_at, started_at) < now() - ($1 || ' days')::interval
     `,
     [deleteSyncRunsDays]
   );
@@ -138,7 +142,7 @@ export async function POST(request) {
         notes = coalesce(notes, 'Marked failed by cleanup job: stale running sync'),
         finished_at = now()
       where status = 'running'
-        and created_at < now() - ($1 || ' minutes')::interval
+        and started_at < now() - ($1 || ' minutes')::interval
       returning id
       `,
       [staleRunningMinutes]
@@ -161,7 +165,7 @@ export async function POST(request) {
       `
       delete from cache.sync_runs
       where status in ('done', 'failed')
-        and coalesce(finished_at, created_at) < now() - ($1 || ' days')::interval
+        and coalesce(finished_at, started_at) < now() - ($1 || ' days')::interval
       returning id
       `,
       [deleteSyncRunsDays]

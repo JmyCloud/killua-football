@@ -1332,6 +1332,29 @@ SET default_tablespace = '';
 SET default_table_access_method = "heap";
 
 
+CREATE TABLE IF NOT EXISTS "cache"."fixture_watchlist" (
+    "fixture_id" bigint NOT NULL,
+    "mode" "text" DEFAULT 'auto'::"text" NOT NULL,
+    "priority" integer DEFAULT 100 NOT NULL,
+    "enabled" boolean DEFAULT true NOT NULL,
+    "starts_at" timestamp with time zone,
+    "expires_at" timestamp with time zone,
+    "notes" "text",
+    "metadata" "jsonb" DEFAULT '{}'::"jsonb" NOT NULL,
+    "last_warmed_at" timestamp with time zone,
+    "last_warm_status" "text",
+    "last_warm_error" "text",
+    "last_match_is_live_like" boolean,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "fixture_watchlist_last_warm_status_check" CHECK (("last_warm_status" = ANY (ARRAY['ok'::"text", 'partial'::"text", 'failed'::"text"]))),
+    CONSTRAINT "fixture_watchlist_mode_check" CHECK (("mode" = ANY (ARRAY['auto'::"text", 'prematch'::"text", 'live'::"text"])))
+);
+
+
+ALTER TABLE "cache"."fixture_watchlist" OWNER TO "postgres";
+
+
 CREATE TABLE IF NOT EXISTS "cache"."fixtures_h2h_index" (
     "home_team_id" bigint NOT NULL,
     "away_team_id" bigint NOT NULL,
@@ -1583,6 +1606,11 @@ CREATE TABLE IF NOT EXISTS "cache"."sync_runs" (
 ALTER TABLE "cache"."sync_runs" OWNER TO "postgres";
 
 
+ALTER TABLE ONLY "cache"."fixture_watchlist"
+    ADD CONSTRAINT "fixture_watchlist_pkey" PRIMARY KEY ("fixture_id");
+
+
+
 ALTER TABLE ONLY "cache"."fixtures_h2h_index"
     ADD CONSTRAINT "fixtures_h2h_index_pkey" PRIMARY KEY ("home_team_id", "away_team_id", "fixture_id", "chunk");
 
@@ -1655,6 +1683,18 @@ ALTER TABLE ONLY "cache"."statistics_seasons_teams_raw"
 
 ALTER TABLE ONLY "cache"."sync_runs"
     ADD CONSTRAINT "sync_runs_pkey" PRIMARY KEY ("id");
+
+
+
+CREATE INDEX "fixture_watchlist_enabled_priority_idx" ON "cache"."fixture_watchlist" USING "btree" ("enabled", "priority", "starts_at");
+
+
+
+CREATE INDEX "fixture_watchlist_expires_idx" ON "cache"."fixture_watchlist" USING "btree" ("expires_at");
+
+
+
+CREATE INDEX "fixture_watchlist_mode_idx" ON "cache"."fixture_watchlist" USING "btree" ("mode");
 
 
 
