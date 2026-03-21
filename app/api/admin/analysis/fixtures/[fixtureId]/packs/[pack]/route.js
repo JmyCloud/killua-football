@@ -13,6 +13,8 @@ import {
   applySafeFixturePackRead,
   applySafeH2HPackRead,
   getPackSafeReadConfig,
+  getPackDetails,
+  summarizeChunkCoverage,
 } from "@/lib/analysis";
 
 export const runtime = "nodejs";
@@ -39,6 +41,7 @@ function buildSafeReadMeta(pack, readParams) {
     },
   };
 }
+
 function basePackMeta(pack) {
   const details = getPackDetails(pack);
   return {
@@ -77,34 +80,31 @@ export async function GET(request, context) {
     const readParams = parsePackReadParams(searchParams, pack);
     const meta = basePackMeta(pack);
 
-if (
-  pack === "fixture_context" ||
-  pack === "fixture_squads" ||
-  pack === "fixture_events_scores" ||
-  pack === "fixture_statistics" ||
-  pack === "fixture_periods"
-) {
-  const chunks = getPackChunks(pack);
-  const data = await getFixtureChunksMap(id, chunks);
+    if (
+      pack === "fixture_context" ||
+      pack === "fixture_squads" ||
+      pack === "fixture_events_scores" ||
+      pack === "fixture_statistics" ||
+      pack === "fixture_periods"
+    ) {
+      const chunks = getPackChunks(pack);
+      const data = await getFixtureChunksMap(id, chunks);
 
-  const safeResult =
-    readParams.read_mode === "safe"
-      ? applySafeFixturePackRead(pack, data, readParams.page, readParams.page_size)
-      : { data, paging: null };
+      const safeResult =
+        readParams.read_mode === "safe"
+          ? applySafeFixturePackRead(pack, data, readParams.page, readParams.page_size)
+          : { data, paging: null };
 
-  return NextResponse.json({
-    ok: true,
-    fixture_id: id,
-    pack,
-    ...buildSafeReadMeta(pack, readParams),
-    completeness: {
-      expected_chunks: chunks,
-      found_chunks: Object.keys(data),
-    },
-    paging: safeResult.paging,
-    data: safeResult.data,
-  });
-}
+      return NextResponse.json({
+        ok: true,
+        fixture_id: id,
+        ...meta,
+        ...buildSafeReadMeta(pack, readParams),
+        coverage: summarizeChunkCoverage(chunks, data),
+        paging: safeResult.paging,
+        data: safeResult.data,
+      });
+    }
 
     if (pack === "h2h_context") {
       if (!actors.home_team_id || !actors.away_team_id) {
@@ -121,19 +121,16 @@ if (
         getH2HChunkRows(actors.home_team_id, actors.away_team_id, "scores", limit, id),
       ]);
 
-      const rawData = {
-        summary,
-        participants,
-        scores,
-      };
+      const rawData = { summary, participants, scores };
       const safeResult =
         readParams.read_mode === "safe"
           ? applySafeH2HPackRead(rawData, readParams.page, readParams.page_size)
           : { data: rawData, paging: null };
+
       return NextResponse.json({
         ok: true,
         fixture_id: id,
-        pack,
+        ...meta,
         ...buildSafeReadMeta(pack, readParams),
         limit,
         excluded_fixture_id: id,
@@ -164,17 +161,16 @@ if (
         id
       );
 
-      const rawData = {
-        events,
-      };
+      const rawData = { events };
       const safeResult =
         readParams.read_mode === "safe"
           ? applySafeH2HPackRead(rawData, readParams.page, readParams.page_size)
           : { data: rawData, paging: null };
+
       return NextResponse.json({
         ok: true,
         fixture_id: id,
-        pack,
+        ...meta,
         ...buildSafeReadMeta(pack, readParams),
         limit,
         excluded_fixture_id: id,
@@ -205,17 +201,16 @@ if (
         id
       );
 
-      const rawData = {
-        statistics,
-      };
+      const rawData = { statistics };
       const safeResult =
         readParams.read_mode === "safe"
           ? applySafeH2HPackRead(rawData, readParams.page, readParams.page_size)
           : { data: rawData, paging: null };
+
       return NextResponse.json({
         ok: true,
         fixture_id: id,
-        pack,
+        ...meta,
         ...buildSafeReadMeta(pack, readParams),
         limit,
         excluded_fixture_id: id,
@@ -246,17 +241,16 @@ if (
         id
       );
 
-      const rawData = {
-        referees,
-      };
+      const rawData = { referees };
       const safeResult =
         readParams.read_mode === "safe"
           ? applySafeH2HPackRead(rawData, readParams.page, readParams.page_size)
           : { data: rawData, paging: null };
+
       return NextResponse.json({
         ok: true,
         fixture_id: id,
-        pack,
+        ...meta,
         ...buildSafeReadMeta(pack, readParams),
         limit,
         excluded_fixture_id: id,

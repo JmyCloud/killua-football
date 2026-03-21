@@ -9,6 +9,10 @@ import {
   getOddsSummary,
   isFixtureLiveLike,
   getPackSafeReadConfig,
+  getPackDetails,
+  summarizeChunkCoverage,
+  buildAnalysisBlueprint,
+  buildCoverageSummary,
 } from "@/lib/analysis";
 
 export const runtime = "nodejs";
@@ -27,6 +31,10 @@ function withSafeReadMeta(name, payload) {
       recommended_read_mode: safe.enabled ? "safe" : "full",
     },
   };
+}
+
+function hasAny(dataMap, ...chunkNames) {
+  return chunkNames.some((name) => Boolean(dataMap?.[name]));
 }
 
 export async function GET(request, context) {
@@ -110,82 +118,111 @@ export async function GET(request, context) {
     );
 
     const packs = [
-  withSafeReadMeta("fixture_context", {
-    name: "fixture_context",
-    ready: hasAny(
-      "base",
-      "state",
-      "league",
-      "season",
-      "stage",
-      "round",
-      "group",
-      "aggregate",
-      "venue",
-      "weatherreport",
-      "metadata"
-    ),
-  }),
-  withSafeReadMeta("fixture_squads", {
-    name: "fixture_squads",
-    ready: hasAny(
-      "participants",
-      "formations",
-      "lineups",
-      "referees",
-      "coaches",
-      "sidelined"
-    ),
-  }),
-  withSafeReadMeta("fixture_events_scores", {
-    name: "fixture_events_scores",
-    ready: hasAny("scores", "events"),
-  }),
-  withSafeReadMeta("fixture_statistics", {
-    name: "fixture_statistics",
-    ready: hasAny("statistics"),
-  }),
-  withSafeReadMeta("fixture_periods", {
-    name: "fixture_periods",
-    ready: hasAny("periods"),
-  }),
-  withSafeReadMeta("h2h_context", {
-    name: "h2h_context",
-    ready: Boolean(actors.home_team_id && actors.away_team_id),
-  }),
-  withSafeReadMeta("h2h_events", {
-    name: "h2h_events",
-    ready: Boolean(actors.home_team_id && actors.away_team_id),
-  }),
-  withSafeReadMeta("h2h_statistics", {
-    name: "h2h_statistics",
-    ready: Boolean(actors.home_team_id && actors.away_team_id),
-  }),
-  withSafeReadMeta("h2h_referees", {
-    name: "h2h_referees",
-    ready: Boolean(actors.home_team_id && actors.away_team_id),
-  }),
-  withSafeReadMeta("home_team_all", {
-    name: "home_team_all",
-    ready: Boolean(homeStats),
-  }),
-  withSafeReadMeta("away_team_all", {
-    name: "away_team_all",
-    ready: Boolean(awayStats),
-  }),
-  withSafeReadMeta("referee_all", {
-    name: "referee_all",
-    ready: Boolean(refereeStats),
-  }),
-  withSafeReadMeta("odds_prematch_summary", {
-    name: "odds_prematch_summary",
-    ready: prematchOdds.length > 0,
-  }),
-  withSafeReadMeta("odds_inplay_summary", {
-    name: "odds_inplay_summary",
-    ready: liveLike && inplayOdds.length > 0,
-  }),
-];
+      withSafeReadMeta("fixture_context", {
+        name: "fixture_context",
+        family: "fixture",
+        label: getPackDetails("fixture_context")?.label ?? null,
+        analysis_focus: getPackDetails("fixture_context")?.analysis_focus ?? [],
+        ready: fixtureContextCoverage.found_count > 0,
+        coverage: fixtureContextCoverage,
+      }),
+      withSafeReadMeta("fixture_squads", {
+        name: "fixture_squads",
+        family: "fixture",
+        label: getPackDetails("fixture_squads")?.label ?? null,
+        analysis_focus: getPackDetails("fixture_squads")?.analysis_focus ?? [],
+        ready: fixtureSquadsCoverage.found_count > 0,
+        coverage: fixtureSquadsCoverage,
+      }),
+      withSafeReadMeta("fixture_events_scores", {
+        name: "fixture_events_scores",
+        family: "fixture",
+        label: getPackDetails("fixture_events_scores")?.label ?? null,
+        analysis_focus: getPackDetails("fixture_events_scores")?.analysis_focus ?? [],
+        ready: fixtureEventsScoresCoverage.found_count > 0,
+        coverage: fixtureEventsScoresCoverage,
+      }),
+      withSafeReadMeta("fixture_statistics", {
+        name: "fixture_statistics",
+        family: "fixture",
+        label: getPackDetails("fixture_statistics")?.label ?? null,
+        analysis_focus: getPackDetails("fixture_statistics")?.analysis_focus ?? [],
+        ready: fixtureStatisticsCoverage.found_count > 0,
+        coverage: fixtureStatisticsCoverage,
+      }),
+      withSafeReadMeta("fixture_periods", {
+        name: "fixture_periods",
+        family: "fixture",
+        label: getPackDetails("fixture_periods")?.label ?? null,
+        analysis_focus: getPackDetails("fixture_periods")?.analysis_focus ?? [],
+        ready: fixturePeriodsCoverage.found_count > 0,
+        coverage: fixturePeriodsCoverage,
+      }),
+      withSafeReadMeta("h2h_context", {
+        name: "h2h_context",
+        family: "h2h",
+        label: getPackDetails("h2h_context")?.label ?? null,
+        analysis_focus: getPackDetails("h2h_context")?.analysis_focus ?? [],
+        ready: Boolean(actors.home_team_id && actors.away_team_id),
+      }),
+      withSafeReadMeta("h2h_events", {
+        name: "h2h_events",
+        family: "h2h",
+        label: getPackDetails("h2h_events")?.label ?? null,
+        analysis_focus: getPackDetails("h2h_events")?.analysis_focus ?? [],
+        ready: Boolean(actors.home_team_id && actors.away_team_id),
+      }),
+      withSafeReadMeta("h2h_statistics", {
+        name: "h2h_statistics",
+        family: "h2h",
+        label: getPackDetails("h2h_statistics")?.label ?? null,
+        analysis_focus: getPackDetails("h2h_statistics")?.analysis_focus ?? [],
+        ready: Boolean(actors.home_team_id && actors.away_team_id),
+      }),
+      withSafeReadMeta("h2h_referees", {
+        name: "h2h_referees",
+        family: "h2h",
+        label: getPackDetails("h2h_referees")?.label ?? null,
+        analysis_focus: getPackDetails("h2h_referees")?.analysis_focus ?? [],
+        ready: Boolean(actors.home_team_id && actors.away_team_id),
+      }),
+      withSafeReadMeta("home_team_all", {
+        name: "home_team_all",
+        family: "team",
+        label: getPackDetails("home_team_all")?.label ?? null,
+        analysis_focus: getPackDetails("home_team_all")?.analysis_focus ?? [],
+        ready: Boolean(homeStats),
+      }),
+      withSafeReadMeta("away_team_all", {
+        name: "away_team_all",
+        family: "team",
+        label: getPackDetails("away_team_all")?.label ?? null,
+        analysis_focus: getPackDetails("away_team_all")?.analysis_focus ?? [],
+        ready: Boolean(awayStats),
+      }),
+      withSafeReadMeta("referee_all", {
+        name: "referee_all",
+        family: "referee",
+        label: getPackDetails("referee_all")?.label ?? null,
+        analysis_focus: getPackDetails("referee_all")?.analysis_focus ?? [],
+        ready: Boolean(refereeStats),
+      }),
+      withSafeReadMeta("odds_prematch_summary", {
+        name: "odds_prematch_summary",
+        family: "odds",
+        label: getPackDetails("odds_prematch_summary")?.label ?? null,
+        analysis_focus: getPackDetails("odds_prematch_summary")?.analysis_focus ?? [],
+        ready: prematchOdds.length > 0,
+      }),
+      withSafeReadMeta("odds_inplay_summary", {
+        name: "odds_inplay_summary",
+        family: "odds",
+        label: getPackDetails("odds_inplay_summary")?.label ?? null,
+        analysis_focus: getPackDetails("odds_inplay_summary")?.analysis_focus ?? [],
+        ready: liveLike && inplayOdds.length > 0,
+        conditional: true,
+      }),
+    ];
 
     const blueprint = buildAnalysisBlueprint(liveLike);
     const coverage = buildCoverageSummary(packs);
@@ -206,11 +243,11 @@ export async function GET(request, context) {
       analysis_blueprint: blueprint,
       coverage,
       notes: [
-  "Read every ready pack unless the user explicitly requested a narrower scope.",
-  "Do not analyze raw sync responses.",
-  "Use market search + market_id only after odds summary packs if a specific odds market is needed.",
-  "For packs with safe_read.enabled=true, read_mode=safe provides exact non-lossy pagination.",
-],
+        "Read every ready pack unless the user explicitly requested a narrower scope.",
+        "Do not analyze raw sync responses.",
+        "Use market search + market_id only after odds summary packs if a specific odds market is needed.",
+        "For packs with safe_read.enabled=true, read_mode=safe provides exact non-lossy pagination.",
+      ],
     });
   } catch (error) {
     return NextResponse.json(
