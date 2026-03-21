@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { fetchAllSportMonksPages } from "@/lib/sportmonks";
-import { staleWhileRevalidate } from "@/lib/cache";
+import { staleWhileRevalidate, parseRefreshMode } from "@/lib/cache";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -91,19 +91,29 @@ export async function POST(request, context) {
     return NextResponse.json({ ok: false, error: "Invalid teamId" }, { status: 400 });
   }
 
+  const { searchParams } = new URL(request.url);
+  const refreshMode = parseRefreshMode(searchParams, "swr");
+
   try {
+    const id = Number(teamId);
+
     const result = await staleWhileRevalidate({
       type: "team_season_stats",
-      getCached: () => getCached(Number(teamId)),
-      refresh: () => refresh(Number(teamId)),
+      getCached: () => getCached(id),
+      refresh: () => refresh(id),
+      mode: refreshMode,
+      lockKey: `sync:team_stats:${id}`,
     });
 
     return NextResponse.json({
       ok: true,
-      team_id: Number(teamId),
+      team_id: id,
       source: result.source,
       stale: result.stale,
       synced: true,
+      refresh_mode: result.mode,
+      freshness: result.freshness,
+      refresh: result.refresh,
       next: {
         read_from: `/api/admin/index/statistics/teams/${teamId}?season_id=current`,
       },

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { fetchAllSportMonksPages } from "@/lib/sportmonks";
-import { staleWhileRevalidate } from "@/lib/cache";
+import { staleWhileRevalidate, parseRefreshMode } from "@/lib/cache";
 import { normalizeH2HPair } from "@/lib/analysis";
 
 export const runtime = "nodejs";
@@ -123,6 +123,7 @@ export async function POST(request, context) {
 
   const { searchParams } = new URL(request.url);
   const limit = parseLimit(searchParams);
+  const refreshMode = parseRefreshMode(searchParams, "swr");
   const pair = normalizeH2HPair(Number(homeTeamId), Number(awayTeamId));
 
   try {
@@ -130,6 +131,8 @@ export async function POST(request, context) {
       type: "fixtures_h2h",
       getCached: () => getCached(Number(homeTeamId), Number(awayTeamId)),
       refresh: () => refresh(Number(homeTeamId), Number(awayTeamId)),
+      mode: refreshMode,
+      lockKey: `sync:h2h:${pair.home_team_id}:${pair.away_team_id}`,
     });
 
     return NextResponse.json({
@@ -146,6 +149,9 @@ export async function POST(request, context) {
       stale: result.stale,
       synced: true,
       requested_limit: limit,
+      refresh_mode: result.mode,
+      freshness: result.freshness,
+      refresh: result.refresh,
       next: {
         read_from: `/api/admin/index/h2h/${homeTeamId}/${awayTeamId}`,
       },

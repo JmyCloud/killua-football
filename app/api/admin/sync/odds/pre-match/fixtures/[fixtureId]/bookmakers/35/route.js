@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { fetchAllSportMonksPages } from "@/lib/sportmonks";
-import { staleWhileRevalidate } from "@/lib/cache";
+import { staleWhileRevalidate, parseRefreshMode } from "@/lib/cache";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,10 +38,11 @@ async function refresh(fixtureId) {
   if (!syncId) throw new Error("Failed to create sync run");
 
   try {
-const pages = await fetchAllSportMonksPages(
-  `odds/pre-match/fixtures/${fixtureId}/bookmakers/${BOOKMAKER_ID}`,
-  { include: INCLUDE, per_page: 50, page: 1 }
-);
+    const pages = await fetchAllSportMonksPages(
+      `odds/pre-match/fixtures/${fixtureId}/bookmakers/${BOOKMAKER_ID}`,
+      { include: INCLUDE, per_page: 50, page: 1 }
+    );
+
     for (const page of pages) {
       await query(
         `insert into cache.odds_prematch_fixtures_bookmakers_35_raw
@@ -91,20 +92,30 @@ export async function POST(request, context) {
     return NextResponse.json({ ok: false, error: "Invalid fixtureId" }, { status: 400 });
   }
 
+  const { searchParams } = new URL(request.url);
+  const refreshMode = parseRefreshMode(searchParams, "swr");
+
   try {
+    const id = Number(fixtureId);
+
     const result = await staleWhileRevalidate({
       type: "odds_prematch",
-      getCached: () => getCached(Number(fixtureId)),
-      refresh: () => refresh(Number(fixtureId)),
+      getCached: () => getCached(id),
+      refresh: () => refresh(id),
+      mode: refreshMode,
+      lockKey: `sync:odds_prematch:${id}:35`,
     });
 
     return NextResponse.json({
       ok: true,
-      fixture_id: Number(fixtureId),
+      fixture_id: id,
       bookmaker_id: BOOKMAKER_ID,
       source: result.source,
       stale: result.stale,
       synced: true,
+      refresh_mode: result.mode,
+      freshness: result.freshness,
+      refresh: result.refresh,
       next: {
         read_from: `/api/admin/index/odds/pre-match/${fixtureId}`,
         search_markets_from: `/api/admin/markets`,
