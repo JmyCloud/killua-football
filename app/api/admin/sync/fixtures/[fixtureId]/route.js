@@ -16,8 +16,8 @@ function isAuthorized(request) {
   return provided === expected;
 }
 
-async function getCached(fixtureId) {
-  const result = await query(
+async function getCached(fixtureId, dbQuery = query) {
+  const result = await dbQuery(
     `select payload as data, fetched_at
      from cache.fixtures_raw
      where fixture_id = $1
@@ -28,8 +28,8 @@ async function getCached(fixtureId) {
   return result.rows[0] ?? null;
 }
 
-async function refresh(fixtureId) {
-  const syncResult = await query(
+async function refresh(fixtureId, dbQuery = query) {
+  const syncResult = await dbQuery(
     `insert into cache.sync_runs (target_table, scope_key, status)
      values ($1, $2, 'running') returning id`,
     ["fixtures_raw", `fixture:${fixtureId}`]
@@ -106,8 +106,8 @@ export async function POST(request, context) {
 
     const result = await staleWhileRevalidate({
       type: "fixtures",
-      getCached: () => getCached(id),
-      refresh: () => refresh(id),
+      getCached: (dbQuery) => getCached(id, dbQuery),
+      refresh: (dbQuery) => refresh(id, dbQuery),
       mode: refreshMode,
       lockKey: `sync:fixtures:${id}`,
     });

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { adminJson } from "@/lib/admin";
-import { query } from "@/lib/db";
+import { tryWithAdvisoryLock } from "@/lib/locks";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,21 +17,6 @@ function isCronAuthorized(request) {
   return Boolean(expected) && provided === `Bearer ${expected}`;
 }
 
-async function tryLock(lockKey) {
-  const result = await query(
-    `select pg_try_advisory_lock(hashtextextended($1, 0)) as locked`,
-    [lockKey]
-  );
-  return result.rows[0]?.locked === true;
-}
-
-async function releaseLock(lockKey) {
-  await query(
-    `select pg_advisory_unlock(hashtextextended($1, 0))`,
-    [lockKey]
-  );
-}
-
 function intParam(searchParams, key, fallback, max) {
   const raw = parseInt(searchParams.get(key) ?? "", 10);
   if (!Number.isInteger(raw) || raw < 1) return fallback;
@@ -44,16 +29,8 @@ export async function GET(request) {
   }
 
   const lockKey = "cron:watchlist";
-  const locked = await tryLock(lockKey);
 
-  if (!locked) {
-    return NextResponse.json(
-      { ok: false, error: "Cron already running" },
-      { status: 409 }
-    );
-  }
-
-  try {
+  const lock = await tryWithAdvisoryLock(lockKey, async () => {
     const { searchParams } = new URL(request.url);
 
     const limit = intParam(searchParams, "limit", DEFAULT_LIMIT, 100);
@@ -108,7 +85,14 @@ export async function GET(request) {
       },
       { status: warm.ok ? 200 : warm.status || 500 }
     );
-  } finally {
-    await releaseLock(lockKey);
+  });
+
+  if (!lock.locked) {
+    return NextResponse.json(
+      { ok: false, error: "Cron already running" },
+      { status: 409 }
+    );
   }
+
+  return lock.value;
 }

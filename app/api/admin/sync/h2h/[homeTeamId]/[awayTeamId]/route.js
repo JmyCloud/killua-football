@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
-import { fetchAllSportMonksPages } from "@/lib/sportmonks";
+import { fetchSportMonksPage } from "@/lib/sportmonks";
 import { staleWhileRevalidate, parseRefreshMode } from "@/lib/cache";
 import { normalizeH2HPair } from "@/lib/analysis";
 
@@ -28,10 +28,10 @@ function parseLimit(searchParams) {
   return Math.min(n, MAX_LIMIT);
 }
 
-async function getCached(homeTeamId, awayTeamId) {
+async function getCached(homeTeamId, awayTeamId, dbQuery = query) {
   const pair = normalizeH2HPair(homeTeamId, awayTeamId);
 
-  const result = await query(
+  const result = await dbQuery(
     `select payload as data, fetched_at
      from cache.fixtures_head_to_head_raw
      where home_team_id = $1 and away_team_id = $2
@@ -43,10 +43,10 @@ async function getCached(homeTeamId, awayTeamId) {
   return result.rows[0] ?? null;
 }
 
-async function refresh(homeTeamId, awayTeamId) {
+async function refresh(homeTeamId, awayTeamId, limit, dbQuery = query) {
   const pair = normalizeH2HPair(homeTeamId, awayTeamId);
 
-  const syncResult = await query(
+  const syncResult = await dbQuery(
     `insert into cache.sync_runs (target_table, scope_key, status)
      values ($1, $2, 'running') returning id`,
     ["fixtures_head_to_head_raw", `h2h:${pair.home_team_id}:${pair.away_team_id}`]
@@ -56,52 +56,58 @@ async function refresh(homeTeamId, awayTeamId) {
   if (!syncId) throw new Error("Failed to create sync run");
 
   try {
-    const pages = await fetchAllSportMonksPages(
+    const payload = await fetchSportMonksPage(
       `fixtures/head-to-head/${homeTeamId}/${awayTeamId}`,
       {
         include: INCLUDE,
-        per_page: 50,
+        per_page: limit,
         page: 1,
         sortBy: "starting_at",
         order: "desc",
       }
     );
 
-    for (const page of pages) {
-      await query(
-        `insert into cache.fixtures_head_to_head_raw
-           (home_team_id, away_team_id, page_number, payload, pagination, fetched_at, sync_run_id)
-         values ($1, $2, $3, $4::jsonb, $5::jsonb, now(), $6)
-         on conflict (home_team_id, away_team_id, page_number) do update set
-           payload     = excluded.payload,
-           pagination  = excluded.pagination,
-           fetched_at  = excluded.fetched_at,
-           sync_run_id = excluded.sync_run_id,
-           updated_at  = now()`,
-        [
-          pair.home_team_id,
-          pair.away_team_id,
-          page.page_number,
-          JSON.stringify(page.payload),
-          JSON.stringify(page.pagination),
-          syncId,
-        ]
-      );
-    }
+    await dbQuery(
+      `insert into cache.fixtures_head_to_head_raw
+         (home_team_id, away_team_id, page_number, payload, pagination, fetched_at, sync_run_id)
+       values ($1, $2, $3, $4::jsonb, $5::jsonb, now(), $6)
+       on conflict (home_team_id, away_team_id, page_number) do update set
+         payload     = excluded.payload,
+         pagination  = excluded.pagination,
+         fetched_at  = excluded.fetched_at,
+         sync_run_id = excluded.sync_run_id,
+         updated_at  = now()`,
+      [
+        pair.home_team_id,
+        pair.away_team_id,
+        1,
+        JSON.stringify(payload),
+        JSON.stringify(payload?.pagination ?? null),
+        syncId,
+      ]
+    );
 
-    await query(
+    await dbQuery(
+      `delete from cache.fixtures_head_to_head_raw
+       where home_team_id = $1
+         and away_team_id = $2
+         and page_number > 1`,
+      [pair.home_team_id, pair.away_team_id]
+    );
+
+    await dbQuery(
       `update cache.sync_runs
        set status = 'done', finished_at = now()
        where id = $1`,
       [syncId]
     );
 
-    await query(
+    await dbQuery(
       `select cache.rebuild_h2h_index($1, $2)`,
       [pair.home_team_id, pair.away_team_id]
     );
   } catch (err) {
-    await query(
+    await dbQuery(
       `update cache.sync_runs
        set status = 'failed', notes = $1, finished_at = now()
        where id = $2`,
@@ -129,8 +135,10 @@ export async function POST(request, context) {
   try {
     const result = await staleWhileRevalidate({
       type: "fixtures_h2h",
-      getCached: () => getCached(Number(homeTeamId), Number(awayTeamId)),
-      refresh: () => refresh(Number(homeTeamId), Number(awayTeamId)),
+      getCached: (dbQuery) =>
+        getCached(Number(homeTeamId), Number(awayTeamId), dbQuery),
+      refresh: (dbQuery) =>
+        refresh(Number(homeTeamId), Number(awayTeamId), limit, dbQuery),
       mode: refreshMode,
       lockKey: `sync:h2h:${pair.home_team_id}:${pair.away_team_id}`,
     });

@@ -15,8 +15,8 @@ function isAuthorized(request) {
   return provided === expected;
 }
 
-async function getCached(teamId) {
-  const result = await query(
+async function getCached(teamId, dbQuery = query) {
+  const result = await dbQuery(
     `select payload as data, fetched_at
      from cache.statistics_seasons_teams_raw
      where team_id = $1
@@ -27,8 +27,8 @@ async function getCached(teamId) {
   return result.rows[0] ?? null;
 }
 
-async function refresh(teamId) {
-  const syncResult = await query(
+async function refresh(teamId, dbQuery = query) {
+  const syncResult = await dbQuery(
     `insert into cache.sync_runs (target_table, scope_key, status)
      values ($1, $2, 'running') returning id`,
     ["statistics_seasons_teams_raw", `team:${teamId}`]
@@ -99,8 +99,8 @@ export async function POST(request, context) {
 
     const result = await staleWhileRevalidate({
       type: "team_season_stats",
-      getCached: () => getCached(id),
-      refresh: () => refresh(id),
+      getCached: (dbQuery) => getCached(id, dbQuery),
+      refresh: (dbQuery) => refresh(id, dbQuery),
       mode: refreshMode,
       lockKey: `sync:team_stats:${id}`,
     });

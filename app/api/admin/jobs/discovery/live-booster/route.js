@@ -3,6 +3,7 @@ import { query } from "@/lib/db";
 import { isAuthorized, unauthorized, adminJson } from "@/lib/admin";
 import { parsePositiveInt } from "@/lib/watchlist";
 import { fetchAllSportMonksPages } from "@/lib/sportmonks";
+import { tryWithAdvisoryLock } from "@/lib/locks";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -181,21 +182,6 @@ async function fetchInplayLivescores() {
   return items;
 }
 
-async function tryJobLock(lockKey) {
-  const result = await query(
-    `select pg_try_advisory_lock(hashtextextended($1, 0)) as locked`,
-    [lockKey]
-  );
-  return result.rows[0]?.locked === true;
-}
-
-async function releaseJobLock(lockKey) {
-  await query(
-    `select pg_advisory_unlock(hashtextextended($1, 0))`,
-    [lockKey]
-  );
-}
-
 async function upsertAutoLiveItems(items) {
   const saved = [];
 
@@ -321,57 +307,58 @@ export async function POST(request) {
   if (!isAuthorized(request)) return unauthorized();
 
   const lockKey = "job:live-booster";
-  const locked = await tryJobLock(lockKey);
-
-  if (!locked) {
-    return NextResponse.json(
-      { ok: false, error: "Live booster already running" },
-      { status: 409 }
-    );
-  }
 
   try {
-    const input = parseInputs(request);
-    const preview = await buildPreview(input);
+    const lock = await tryWithAdvisoryLock(lockKey, async () => {
+      const input = parseInputs(request);
+      const preview = await buildPreview(input);
 
-    const saved = await upsertAutoLiveItems(preview.candidates);
-    const liveFixtureIds = preview.candidates.map((x) => x.fixture_id);
+      const saved = await upsertAutoLiveItems(preview.candidates);
+      const liveFixtureIds = preview.candidates.map((x) => x.fixture_id);
 
-    const warm =
-      liveFixtureIds.length > 0
-        ? await adminJson(
-            request,
-            `/jobs/warm/watchlist?limit=${input.limit}` +
-              `&concurrency=${input.concurrency}` +
-              `&h2h_limit=${input.h2hLimit}` +
-              `&live_fixture_ids=${liveFixtureIds.join(",")}`,
-            { method: "POST" }
-          )
-        : {
-            ok: true,
-            status: 200,
-            body: { ok: true, summary: { total_jobs: 0, succeeded: 0, failed: 0 } },
-          };
+      const warm =
+        liveFixtureIds.length > 0
+          ? await adminJson(
+              request,
+              `/jobs/warm/watchlist?limit=${input.limit}` +
+                `&concurrency=${input.concurrency}` +
+                `&h2h_limit=${input.h2hLimit}` +
+                `&live_fixture_ids=${liveFixtureIds.join(",")}`,
+              { method: "POST" }
+            )
+          : {
+              ok: true,
+              status: 200,
+              body: { ok: true, summary: { total_jobs: 0, succeeded: 0, failed: 0 } },
+            };
 
-    return NextResponse.json({
-      ok: warm.ok,
-      strategy: preview.strategy,
-      source: preview.source,
-      summary: {
-        candidate_count: preview.candidates.length,
-        saved_or_updated_count: saved.length,
-        warmed_count: liveFixtureIds.length,
-      },
-      saved,
-      warm: warm.body ?? null,
-      candidates: preview.candidates,
+      return NextResponse.json({
+        ok: warm.ok,
+        strategy: preview.strategy,
+        source: preview.source,
+        summary: {
+          candidate_count: preview.candidates.length,
+          saved_or_updated_count: saved.length,
+          warmed_count: liveFixtureIds.length,
+        },
+        saved,
+        warm: warm.body ?? null,
+        candidates: preview.candidates,
+      });
     });
+
+    if (!lock.locked) {
+      return NextResponse.json(
+        { ok: false, error: "Live booster already running" },
+        { status: 409 }
+      );
+    }
+
+    return lock.value;
   } catch (error) {
     return NextResponse.json(
       { ok: false, error: error.message ?? "Unknown error" },
       { status: 500 }
     );
-  } finally {
-    await releaseJobLock(lockKey).catch(() => {});
   }
 }

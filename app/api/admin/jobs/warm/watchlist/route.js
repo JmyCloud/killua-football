@@ -242,7 +242,7 @@ export async function POST(request) {
       input.concurrency,
       async (job) => {
         const refreshMode = "fresh_if_stale";
-        const liveRefreshMode = job.mode === "live" ? "force_fresh" : "force_fresh";
+        const liveRefreshMode = job.mode === "live" ? "force_fresh" : "fresh_if_stale";
 
         const path =
           `/sync/analysis/fixtures/${job.fixture_id}` +

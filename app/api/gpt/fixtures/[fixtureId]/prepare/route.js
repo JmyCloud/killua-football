@@ -30,11 +30,11 @@ export async function POST(request, context) {
     ["swr", "fresh_if_stale", "force_fresh"],
     "fresh_if_stale"
   );
-  const liveRefreshMode = parseEnumParam(
-    url.searchParams.get("live_refresh_mode"),
-    ["swr", "fresh_if_stale", "force_fresh"],
-    "force_fresh"
-  );
+const liveRefreshMode = parseEnumParam(
+  url.searchParams.get("live_refresh_mode"),
+  ["swr", "fresh_if_stale", "force_fresh"],
+  "fresh_if_stale"
+);
 
   const qs = new URLSearchParams();
   qs.set("h2h_limit", String(h2hLimit));
