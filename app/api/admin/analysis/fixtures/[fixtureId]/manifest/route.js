@@ -1,13 +1,16 @@
 import { NextResponse } from "next/server";
 import { isAuthorized, unauthorized } from "@/lib/admin";
 import {
-  ANALYSIS_PACKS,
   resolveFixtureActors,
   getFixtureChunksMap,
   getCurrentTeamStats,
   getCurrentRefereeStats,
   getOddsSummary,
   isFixtureLiveLike,
+  getPackDetails,
+  summarizeChunkCoverage,
+  buildAnalysisBlueprint,
+  buildCoverageSummary,
 } from "@/lib/analysis";
 
 export const runtime = "nodejs";
@@ -28,7 +31,7 @@ export async function GET(request, context) {
     const id = Number(fixtureId);
     const actors = await resolveFixtureActors(id);
 
-    const fixtureRequired = await getFixtureChunksMap(id, [
+    const fixtureChunks = await getFixtureChunksMap(id, [
       "base",
       "state",
       "league",
@@ -68,85 +71,126 @@ export async function GET(request, context) {
     const liveLike = isFixtureLiveLike(actors.state);
     const inplayOdds = liveLike ? await getOddsSummary(id, "inplay") : [];
 
-    const hasAny = (...chunkNames) => chunkNames.some((name) => Boolean(fixtureRequired[name]));
+    const fixtureContextCoverage = summarizeChunkCoverage(
+      getPackDetails("fixture_context").contains,
+      fixtureChunks
+    );
+
+    const fixtureSquadsCoverage = summarizeChunkCoverage(
+      getPackDetails("fixture_squads").contains,
+      fixtureChunks
+    );
+
+    const fixtureEventsScoresCoverage = summarizeChunkCoverage(
+      getPackDetails("fixture_events_scores").contains,
+      fixtureChunks
+    );
+
+    const fixtureStatisticsCoverage = summarizeChunkCoverage(
+      getPackDetails("fixture_statistics").contains,
+      fixtureChunks
+    );
+
+    const fixturePeriodsCoverage = summarizeChunkCoverage(
+      getPackDetails("fixture_periods").contains,
+      fixtureChunks
+    );
 
     const packs = [
       {
         name: "fixture_context",
-        ready: hasAny(
-          "base",
-          "state",
-          "league",
-          "season",
-          "stage",
-          "round",
-          "group",
-          "aggregate",
-          "venue",
-          "weatherreport",
-          "metadata"
-        ),
+        family: "fixture",
+        ready: fixtureContextCoverage.found_count > 0,
+        coverage: fixtureContextCoverage,
+        analysis_focus: getPackDetails("fixture_context").analysis_focus,
       },
       {
         name: "fixture_squads",
-        ready: hasAny(
-          "participants",
-          "formations",
-          "lineups",
-          "referees",
-          "coaches",
-          "sidelined"
-        ),
+        family: "fixture",
+        ready: fixtureSquadsCoverage.found_count > 0,
+        coverage: fixtureSquadsCoverage,
+        analysis_focus: getPackDetails("fixture_squads").analysis_focus,
       },
       {
         name: "fixture_events_scores",
-        ready: hasAny("scores", "events"),
+        family: "fixture",
+        ready: fixtureEventsScoresCoverage.found_count > 0,
+        coverage: fixtureEventsScoresCoverage,
+        analysis_focus: getPackDetails("fixture_events_scores").analysis_focus,
       },
       {
         name: "fixture_statistics",
-        ready: hasAny("statistics"),
+        family: "fixture",
+        ready: fixtureStatisticsCoverage.found_count > 0,
+        coverage: fixtureStatisticsCoverage,
+        analysis_focus: getPackDetails("fixture_statistics").analysis_focus,
       },
       {
         name: "fixture_periods",
-        ready: hasAny("periods"),
+        family: "fixture",
+        ready: fixturePeriodsCoverage.found_count > 0,
+        coverage: fixturePeriodsCoverage,
+        analysis_focus: getPackDetails("fixture_periods").analysis_focus,
       },
       {
         name: "h2h_context",
+        family: "h2h",
         ready: Boolean(actors.home_team_id && actors.away_team_id),
+        analysis_focus: getPackDetails("h2h_context").analysis_focus,
       },
       {
         name: "h2h_events",
+        family: "h2h",
         ready: Boolean(actors.home_team_id && actors.away_team_id),
+        analysis_focus: getPackDetails("h2h_events").analysis_focus,
       },
       {
         name: "h2h_statistics",
+        family: "h2h",
         ready: Boolean(actors.home_team_id && actors.away_team_id),
+        analysis_focus: getPackDetails("h2h_statistics").analysis_focus,
       },
       {
         name: "h2h_referees",
+        family: "h2h",
         ready: Boolean(actors.home_team_id && actors.away_team_id),
+        analysis_focus: getPackDetails("h2h_referees").analysis_focus,
       },
       {
         name: "home_team_all",
+        family: "team",
         ready: Boolean(homeStats),
+        analysis_focus: getPackDetails("home_team_all").analysis_focus,
       },
       {
         name: "away_team_all",
+        family: "team",
         ready: Boolean(awayStats),
+        analysis_focus: getPackDetails("away_team_all").analysis_focus,
       },
       {
         name: "referee_all",
+        family: "referee",
         ready: Boolean(refereeStats),
+        analysis_focus: getPackDetails("referee_all").analysis_focus,
       },
       {
         name: "odds_prematch_summary",
+        family: "odds",
         ready: prematchOdds.length > 0,
+        analysis_focus: getPackDetails("odds_prematch_summary").analysis_focus,
       },
       {
         name: "odds_inplay_summary",
+        family: "odds",
         ready: liveLike && inplayOdds.length > 0,
+        conditional: true,
+        analysis_focus: getPackDetails("odds_inplay_summary").analysis_focus,
       },
     ];
+
+    const blueprint = buildAnalysisBlueprint(liveLike);
+    const coverage = buildCoverageSummary(packs);
 
     return NextResponse.json({
       ok: true,
@@ -159,13 +203,15 @@ export async function GET(request, context) {
       },
       state: actors.state ?? null,
       match_is_live_like: liveLike,
-      default_read_order: ANALYSIS_PACKS,
+      default_read_order: blueprint.full_mode.default_read_order,
       packs,
+      analysis_blueprint: blueprint,
+      coverage,
       notes: [
         "Read every ready pack unless the user explicitly requested a narrower scope.",
         "Do not analyze raw sync responses.",
-        "Use market search + market_id only after odds summary packs if a specific odds market is needed.",
-        "Read odds_inplay_summary only when it is ready or the user explicitly asks for live odds.",
+        "Use specific market reads only after odds summary packs when needed.",
+        "If a fixture pack is partially covered, analyze what exists and explicitly mention missing chunks.",
       ],
     });
   } catch (error) {

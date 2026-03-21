@@ -9,6 +9,8 @@ import {
   getCurrentRefereeStats,
   getOddsSummary,
   resolveFixtureActors,
+  getPackDetails,
+  summarizeChunkCoverage,
 } from "@/lib/analysis";
 
 export const runtime = "nodejs";
@@ -20,6 +22,17 @@ function parseLimit(searchParams) {
   const n = parseInt(raw, 10);
   if (!Number.isInteger(n) || n < 1) return 5;
   return Math.min(n, 20);
+}
+
+function basePackMeta(pack) {
+  const details = getPackDetails(pack);
+  return {
+    pack,
+    family: details?.family ?? null,
+    label: details?.label ?? null,
+    contains: details?.contains ?? [],
+    analysis_focus: details?.analysis_focus ?? [],
+  };
 }
 
 export async function GET(request, context) {
@@ -46,6 +59,7 @@ export async function GET(request, context) {
     const actors = await resolveFixtureActors(id);
     const { searchParams } = new URL(request.url);
     const limit = parseLimit(searchParams);
+    const meta = basePackMeta(pack);
 
     if (
       pack === "fixture_context" ||
@@ -60,11 +74,8 @@ export async function GET(request, context) {
       return NextResponse.json({
         ok: true,
         fixture_id: id,
-        pack,
-        completeness: {
-          expected_chunks: chunks,
-          found_chunks: Object.keys(data),
-        },
+        ...meta,
+        coverage: summarizeChunkCoverage(chunks, data),
         data,
       });
     }
@@ -73,7 +84,7 @@ export async function GET(request, context) {
       if (!actors.home_team_id || !actors.away_team_id) {
         return NextResponse.json({
           ok: false,
-          pack,
+          ...meta,
           error: "Missing home/away team IDs from participants chunk.",
         }, { status: 404 });
       }
@@ -87,7 +98,7 @@ export async function GET(request, context) {
       return NextResponse.json({
         ok: true,
         fixture_id: id,
-        pack,
+        ...meta,
         limit,
         excluded_fixture_id: id,
         sort: "starting_at_desc_then_fixture_id_desc",
@@ -107,7 +118,7 @@ export async function GET(request, context) {
       if (!actors.home_team_id || !actors.away_team_id) {
         return NextResponse.json({
           ok: false,
-          pack,
+          ...meta,
           error: "Missing home/away team IDs from participants chunk.",
         }, { status: 404 });
       }
@@ -123,7 +134,7 @@ export async function GET(request, context) {
       return NextResponse.json({
         ok: true,
         fixture_id: id,
-        pack,
+        ...meta,
         limit,
         excluded_fixture_id: id,
         sort: "starting_at_desc_then_fixture_id_desc",
@@ -141,7 +152,7 @@ export async function GET(request, context) {
       if (!actors.home_team_id || !actors.away_team_id) {
         return NextResponse.json({
           ok: false,
-          pack,
+          ...meta,
           error: "Missing home/away team IDs from participants chunk.",
         }, { status: 404 });
       }
@@ -157,7 +168,7 @@ export async function GET(request, context) {
       return NextResponse.json({
         ok: true,
         fixture_id: id,
-        pack,
+        ...meta,
         limit,
         excluded_fixture_id: id,
         sort: "starting_at_desc_then_fixture_id_desc",
@@ -175,7 +186,7 @@ export async function GET(request, context) {
       if (!actors.home_team_id || !actors.away_team_id) {
         return NextResponse.json({
           ok: false,
-          pack,
+          ...meta,
           error: "Missing home/away team IDs from participants chunk.",
         }, { status: 404 });
       }
@@ -191,7 +202,7 @@ export async function GET(request, context) {
       return NextResponse.json({
         ok: true,
         fixture_id: id,
-        pack,
+        ...meta,
         limit,
         excluded_fixture_id: id,
         sort: "starting_at_desc_then_fixture_id_desc",
@@ -209,7 +220,7 @@ export async function GET(request, context) {
       if (!actors.home_team_id) {
         return NextResponse.json({
           ok: false,
-          pack,
+          ...meta,
           error: "Home team not found in participants chunk.",
         }, { status: 404 });
       }
@@ -218,7 +229,7 @@ export async function GET(request, context) {
       if (!row) {
         return NextResponse.json({
           ok: false,
-          pack,
+          ...meta,
           error: `No team stats found for team ${actors.home_team_id}.`,
         }, { status: 404 });
       }
@@ -226,7 +237,7 @@ export async function GET(request, context) {
       return NextResponse.json({
         ok: true,
         fixture_id: id,
-        pack,
+        ...meta,
         team_id: row.team_id,
         team_name: row.team_name,
         season_id: row.season_id,
@@ -246,7 +257,7 @@ export async function GET(request, context) {
       if (!actors.away_team_id) {
         return NextResponse.json({
           ok: false,
-          pack,
+          ...meta,
           error: "Away team not found in participants chunk.",
         }, { status: 404 });
       }
@@ -255,7 +266,7 @@ export async function GET(request, context) {
       if (!row) {
         return NextResponse.json({
           ok: false,
-          pack,
+          ...meta,
           error: `No team stats found for team ${actors.away_team_id}.`,
         }, { status: 404 });
       }
@@ -263,7 +274,7 @@ export async function GET(request, context) {
       return NextResponse.json({
         ok: true,
         fixture_id: id,
-        pack,
+        ...meta,
         team_id: row.team_id,
         team_name: row.team_name,
         season_id: row.season_id,
@@ -283,7 +294,7 @@ export async function GET(request, context) {
       if (!actors.referee_id) {
         return NextResponse.json({
           ok: false,
-          pack,
+          ...meta,
           missing: true,
           error: "Referee not found in fixture referees chunk.",
         }, { status: 404 });
@@ -293,7 +304,7 @@ export async function GET(request, context) {
       if (!row) {
         return NextResponse.json({
           ok: false,
-          pack,
+          ...meta,
           error: `No referee stats found for referee ${actors.referee_id}.`,
         }, { status: 404 });
       }
@@ -301,7 +312,7 @@ export async function GET(request, context) {
       return NextResponse.json({
         ok: true,
         fixture_id: id,
-        pack,
+        ...meta,
         referee_id: row.referee_id,
         referee_name: row.referee_name,
         season_id: row.season_id,
@@ -324,7 +335,7 @@ export async function GET(request, context) {
       return NextResponse.json({
         ok: true,
         fixture_id: id,
-        pack,
+        ...meta,
         mode: "prematch",
         markets_available: rows.length,
         usage_hint: "Use /markets?search=keyword then /index/odds/pre-match/{fixture_id}?market_id={id} for a specific market.",
@@ -343,7 +354,7 @@ export async function GET(request, context) {
       return NextResponse.json({
         ok: true,
         fixture_id: id,
-        pack,
+        ...meta,
         mode: "inplay",
         markets_available: rows.length,
         usage_hint: "Use /markets?search=keyword then /index/odds/inplay/{fixture_id}?market_id={id} for a specific market.",
