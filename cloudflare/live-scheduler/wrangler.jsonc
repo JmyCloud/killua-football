@@ -1,0 +1,32 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "killua-live-scheduler",
+  "main": "src/index.js",
+  "compatibility_date": "2026-03-21",
+  "workers_dev": true,
+
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "LIVE_LOOP",
+        "class_name": "LiveLoop"
+      }
+    ]
+  },
+
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["LiveLoop"]
+    }
+  ],
+
+  "vars": {
+    "TARGET_BASE_URL": "https://killua-football.vercel.app",
+    "LOOP_INTERVAL_MS": "8000",
+    "TARGET_LIMIT": "10",
+    "TARGET_CONCURRENCY": "2",
+    "TARGET_H2H_LIMIT": "5",
+    "TARGET_FALLBACK_INPLAY": "true"
+  }
+}

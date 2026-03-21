@@ -181,6 +181,21 @@ async function fetchInplayLivescores() {
   return items;
 }
 
+async function tryJobLock(lockKey) {
+  const result = await query(
+    `select pg_try_advisory_lock(hashtextextended($1, 0)) as locked`,
+    [lockKey]
+  );
+  return result.rows[0]?.locked === true;
+}
+
+async function releaseJobLock(lockKey) {
+  await query(
+    `select pg_advisory_unlock(hashtextextended($1, 0))`,
+    [lockKey]
+  );
+}
+
 async function upsertAutoLiveItems(items) {
   const saved = [];
 
@@ -305,6 +320,16 @@ export async function GET(request) {
 export async function POST(request) {
   if (!isAuthorized(request)) return unauthorized();
 
+  const lockKey = "job:live-booster";
+  const locked = await tryJobLock(lockKey);
+
+  if (!locked) {
+    return NextResponse.json(
+      { ok: false, error: "Live booster already running" },
+      { status: 409 }
+    );
+  }
+
   try {
     const input = parseInputs(request);
     const preview = await buildPreview(input);
@@ -322,10 +347,14 @@ export async function POST(request) {
               `&live_fixture_ids=${liveFixtureIds.join(",")}`,
             { method: "POST" }
           )
-        : { ok: true, status: 200, body: { ok: true, summary: { total_jobs: 0, succeeded: 0, failed: 0 } } };
+        : {
+            ok: true,
+            status: 200,
+            body: { ok: true, summary: { total_jobs: 0, succeeded: 0, failed: 0 } },
+          };
 
     return NextResponse.json({
-      ok: saved.length > 0 && warm.ok,
+      ok: warm.ok,
       strategy: preview.strategy,
       source: preview.source,
       summary: {
@@ -342,5 +371,7 @@ export async function POST(request) {
       { ok: false, error: error.message ?? "Unknown error" },
       { status: 500 }
     );
+  } finally {
+    await releaseJobLock(lockKey).catch(() => {});
   }
 }

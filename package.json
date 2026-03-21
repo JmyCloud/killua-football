@@ -4,7 +4,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+   "smoke:gpt": "node scripts/smoke-gpt.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.99.3",
