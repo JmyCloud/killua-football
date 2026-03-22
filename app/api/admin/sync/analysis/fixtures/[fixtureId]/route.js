@@ -139,10 +139,10 @@ export async function POST(request, context) {
       tasks.push({ step: "sync_odds_inplay", fn: () => syncOddsInplay(id, liveRefreshMode) });
     }
 
-    // Concurrency limiter — max 2 syncs at a time to avoid
-    // exceeding Supabase session-mode connection limit.
-    // Each sync holds a DB connection (advisory lock) for its full duration.
-    const CONCURRENCY = 2;
+    // Concurrency limiter — max 4 syncs at a time.
+    // With advisory locks removed, connections are brief (query-level, not held).
+    // Transaction Mode pooler (port 6543) handles this well.
+    const CONCURRENCY = 4;
     const sync_results = await runWithConcurrency(tasks, CONCURRENCY, id, logger);
 
     const failed_steps = sync_results.filter((r) => !r.ok).map((r) => r.step);

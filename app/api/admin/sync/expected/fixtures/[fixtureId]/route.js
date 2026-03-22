@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
-import { fetchAllSportMonksPages } from "@/lib/sportmonks";
+import { fetchSportMonksPage } from "@/lib/sportmonks";
 import { staleWhileRevalidate, parseRefreshMode } from "@/lib/cache";
 import { isAuthorized, unauthorized } from "@/lib/admin";
 
@@ -33,26 +33,26 @@ async function refresh(fixtureId, dbQuery = query) {
     let teamXG = [];
     let playerXG = [];
 
-    // Team-level xG: expected/fixtures (include: type;fixture;participant)
+    // Team-level xG: single-fixture endpoint (no pagination needed)
     try {
-      const pages = await fetchAllSportMonksPages(
-        `expected/fixtures`,
-        { per_page: 50, page: 1, include: "type;fixture;participant" }
+      const resp = await fetchSportMonksPage(
+        `expected/fixtures/${fixtureId}`,
+        { include: "type;fixture;participant" }
       );
-      const all = pages.flatMap((p) => p.payload?.data ?? []);
-      teamXG = all.filter((item) => Number(item.fixture_id) === Number(fixtureId));
+      const d = resp?.data;
+      teamXG = Array.isArray(d) ? d : d ? [d] : [];
     } catch {
-      // Team xG data may not be available
+      // Team xG data may not be available (pre-match or plan limitation)
     }
 
-    // Player-level xG: expected/lineups (include: type;fixture;player;team)
+    // Player-level xG: single-fixture endpoint (no pagination needed)
     try {
-      const pages = await fetchAllSportMonksPages(
-        `expected/lineups`,
-        { per_page: 50, page: 1, include: "type;fixture;player;team" }
+      const resp = await fetchSportMonksPage(
+        `expected/lineups/${fixtureId}`,
+        { include: "type;fixture;player;team" }
       );
-      const all = pages.flatMap((p) => p.payload?.data ?? []);
-      playerXG = all.filter((item) => Number(item.fixture_id) === Number(fixtureId));
+      const d = resp?.data;
+      playerXG = Array.isArray(d) ? d : d ? [d] : [];
     } catch {
       // Player xG data may not be available
     }
