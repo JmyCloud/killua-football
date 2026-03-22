@@ -6,6 +6,7 @@ import { isAuthorized, unauthorized } from "@/lib/admin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 async function getCached(fixtureId, dbQuery = query) {
   const result = await dbQuery(
@@ -29,15 +30,19 @@ async function refresh(fixtureId, dbQuery = query) {
   if (!syncId) throw new Error("Failed to create sync run");
 
   try {
-    const pages = await fetchAllSportMonksPages(
-      `news/pre-match/upcoming`,
-      { per_page: 50, page: 1 }
-    );
-
-    const allNews = pages.flatMap((p) => p.payload?.data ?? []);
-    const fixtureNews = allNews.filter(
-      (item) => Number(item.fixture_id) === Number(fixtureId)
-    );
+    let fixtureNews = [];
+    try {
+      const pages = await fetchAllSportMonksPages(
+        `news/pre-match/upcoming`,
+        { per_page: 50, page: 1 }
+      );
+      const allNews = pages.flatMap((p) => p.payload?.data ?? []);
+      fixtureNews = allNews.filter(
+        (item) => Number(item.fixture_id) === Number(fixtureId)
+      );
+    } catch {
+      // News may not be available for this fixture or plan
+    }
 
     await dbQuery(
       `insert into cache.fixture_news_raw

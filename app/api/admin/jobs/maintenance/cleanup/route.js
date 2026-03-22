@@ -5,6 +5,7 @@ import { parsePositiveInt } from "@/lib/watchlist";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 const DEFAULT_STALE_RUNNING_MINUTES = 30;
 const DEFAULT_DELETE_SYNC_RUNS_DAYS = 14;

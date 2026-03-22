@@ -7,6 +7,7 @@ import { resolveFixtureActors } from "@/lib/analysis";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 async function getCached(fixtureId, dbQuery = query) {
   const result = await dbQuery(

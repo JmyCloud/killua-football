@@ -9,6 +9,7 @@ import {
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 const DEFAULT_LIMIT = 25;
 const DEFAULT_CONCURRENCY = 2;

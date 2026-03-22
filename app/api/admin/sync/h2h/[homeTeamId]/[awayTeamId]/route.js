@@ -7,6 +7,7 @@ import { isAuthorized, unauthorized } from "@/lib/admin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 const INCLUDE =
   "league;season;stage;round;group;aggregate;venue;state;participants;scores.type;events.type;statistics.type;periods.type;referees.referee;referees.type;formations;coaches";

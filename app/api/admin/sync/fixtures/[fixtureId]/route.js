@@ -6,6 +6,7 @@ import { isAuthorized, unauthorized } from "@/lib/admin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 const FIXTURE_INCLUDE =
   "league;season;stage;round;group;aggregate;venue;state;weatherReport;participants;metadata;formations;lineups.player;lineups.detailedPosition;lineups.details.type;scores.type;events.type;statistics.type;periods.type;periods.statistics.type;referees.referee;referees.type;coaches;sidelined.sideline.player;sidelined.sideline.type";

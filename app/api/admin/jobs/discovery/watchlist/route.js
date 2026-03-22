@@ -6,6 +6,7 @@ import { fetchAllSportMonksPages } from "@/lib/sportmonks";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 const DEFAULT_LIMIT = 20;
 const DEFAULT_LOOKAHEAD_HOURS = 36;

@@ -6,6 +6,7 @@ import { isAuthorized, unauthorized } from "@/lib/admin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 async function getCached(fixtureId, dbQuery = query) {
   const result = await dbQuery(
@@ -29,16 +30,20 @@ async function refresh(fixtureId, dbQuery = query) {
   if (!syncId) throw new Error("Failed to create sync run");
 
   try {
-    const pages = await fetchAllSportMonksPages(
-      `expected/fixtures/${fixtureId}`,
-      {
-        per_page: 50,
-        page: 1,
-        include: "type;participant",
-      }
-    );
-
-    const items = pages.flatMap((p) => p.payload?.data ?? []);
+    let items = [];
+    try {
+      const pages = await fetchAllSportMonksPages(
+        `expected/fixtures/${fixtureId}`,
+        {
+          per_page: 50,
+          page: 1,
+          include: "type;participant",
+        }
+      );
+      items = pages.flatMap((p) => p.payload?.data ?? []);
+    } catch {
+      // xG data may not be available for this fixture or plan
+    }
 
     await dbQuery(
       `insert into cache.fixture_xg_raw

@@ -73,39 +73,49 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA "extensions";
 
 
 CREATE OR REPLACE FUNCTION "cache"."purge_stale_cache"() RETURNS "void"
-    LANGUAGE "plpgsql" SECURITY DEFINER
+    LANGUAGE "plpgsql"
     AS $$
 begin
-  -- live odds: قصيرة جدًا
-  delete from cache.odds_inplay_fixtures_bookmakers_35_raw
-  where fetched_at < now() - interval '30 minutes';
-
-  -- prematch / fixtures: يومين
-  delete from cache.odds_prematch_fixtures_bookmakers_35_raw
-  where fetched_at < now() - interval '2 days';
-
   delete from cache.fixtures_raw
-  where fetched_at < now() - interval '2 days';
+    where fetched_at < now() - interval '48 hours';
 
-  -- h2h / team / referee: أسبوع
-  delete from cache.fixtures_head_to_head_raw
-  where fetched_at < now() - interval '7 days';
+  delete from cache.fixtures_h2h_raw
+    where fetched_at < now() - interval '48 hours';
 
   delete from cache.statistics_seasons_teams_raw
-  where fetched_at < now() - interval '7 days';
+    where fetched_at < now() - interval '48 hours';
 
   delete from cache.statistics_seasons_referees_raw
-  where fetched_at < now() - interval '7 days';
+    where fetched_at < now() - interval '48 hours';
 
-  -- markets catalog: 30 يوم
-  delete from cache.odds_markets_raw
-  where fetched_at < now() - interval '30 days';
+  delete from cache.odds_prematch_fixtures_bookmakers_35_raw
+    where fetched_at < now() - interval '24 hours';
+
+  delete from cache.odds_inplay_fixtures_bookmakers_35_raw
+    where fetched_at < now() - interval '6 hours';
+
+  delete from cache.fixture_xg_raw
+    where fetched_at < now() - interval '24 hours';
+
+  delete from cache.fixture_predictions_raw
+    where fetched_at < now() - interval '24 hours';
+
+  delete from cache.fixture_news_raw
+    where fetched_at < now() - interval '24 hours';
+
+  delete from cache.fixture_expected_lineups_raw
+    where fetched_at < now() - interval '24 hours';
+
+  delete from cache.standings_seasons_raw
+    where fetched_at < now() - interval '48 hours';
+
+  delete from cache.fixture_transfer_rumours_raw
+    where fetched_at < now() - interval '24 hours';
 
   delete from cache.sync_runs
-  where started_at < now() - interval '14 days';
+    where started_at < now() - interval '7 days';
 end;
 $$;
-
 
 ALTER FUNCTION "cache"."purge_stale_cache"() OWNER TO "postgres";
 
@@ -1332,6 +1342,54 @@ SET default_tablespace = '';
 SET default_table_access_method = "heap";
 
 
+CREATE TABLE IF NOT EXISTS "cache"."fixture_expected_lineups_raw" (
+    "fixture_id" bigint NOT NULL,
+    "payload" "jsonb" NOT NULL,
+    "fetched_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "sync_run_id" "uuid"
+);
+
+
+ALTER TABLE "cache"."fixture_expected_lineups_raw" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "cache"."fixture_news_raw" (
+    "fixture_id" bigint NOT NULL,
+    "payload" "jsonb" NOT NULL,
+    "fetched_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "sync_run_id" "uuid"
+);
+
+
+ALTER TABLE "cache"."fixture_news_raw" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "cache"."fixture_predictions_raw" (
+    "fixture_id" bigint NOT NULL,
+    "payload" "jsonb" NOT NULL,
+    "fetched_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "sync_run_id" "uuid"
+);
+
+
+ALTER TABLE "cache"."fixture_predictions_raw" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "cache"."fixture_transfer_rumours_raw" (
+    "fixture_id" bigint NOT NULL,
+    "payload" "jsonb" NOT NULL,
+    "fetched_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "sync_run_id" "uuid"
+);
+
+
+ALTER TABLE "cache"."fixture_transfer_rumours_raw" OWNER TO "postgres";
+
+
 CREATE TABLE IF NOT EXISTS "cache"."fixture_watchlist" (
     "fixture_id" bigint NOT NULL,
     "mode" "text" DEFAULT 'auto'::"text" NOT NULL,
@@ -1353,6 +1411,18 @@ CREATE TABLE IF NOT EXISTS "cache"."fixture_watchlist" (
 
 
 ALTER TABLE "cache"."fixture_watchlist" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "cache"."fixture_xg_raw" (
+    "fixture_id" bigint NOT NULL,
+    "payload" "jsonb" NOT NULL,
+    "fetched_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "sync_run_id" "uuid"
+);
+
+
+ALTER TABLE "cache"."fixture_xg_raw" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "cache"."fixtures_h2h_index" (
@@ -1501,6 +1571,18 @@ CREATE TABLE IF NOT EXISTS "cache"."odds_prematch_index" (
 ALTER TABLE "cache"."odds_prematch_index" OWNER TO "postgres";
 
 
+CREATE TABLE IF NOT EXISTS "cache"."standings_seasons_raw" (
+    "season_id" bigint NOT NULL,
+    "payload" "jsonb" NOT NULL,
+    "fetched_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "sync_run_id" "uuid"
+);
+
+
+ALTER TABLE "cache"."standings_seasons_raw" OWNER TO "postgres";
+
+
 CREATE TABLE IF NOT EXISTS "cache"."statistics_seasons_referees_index" (
     "referee_id" bigint NOT NULL,
     "season_id" bigint NOT NULL,
@@ -1606,8 +1688,33 @@ CREATE TABLE IF NOT EXISTS "cache"."sync_runs" (
 ALTER TABLE "cache"."sync_runs" OWNER TO "postgres";
 
 
+ALTER TABLE ONLY "cache"."fixture_expected_lineups_raw"
+    ADD CONSTRAINT "fixture_expected_lineups_raw_pkey" PRIMARY KEY ("fixture_id");
+
+
+
+ALTER TABLE ONLY "cache"."fixture_news_raw"
+    ADD CONSTRAINT "fixture_news_raw_pkey" PRIMARY KEY ("fixture_id");
+
+
+
+ALTER TABLE ONLY "cache"."fixture_predictions_raw"
+    ADD CONSTRAINT "fixture_predictions_raw_pkey" PRIMARY KEY ("fixture_id");
+
+
+
+ALTER TABLE ONLY "cache"."fixture_transfer_rumours_raw"
+    ADD CONSTRAINT "fixture_transfer_rumours_raw_pkey" PRIMARY KEY ("fixture_id");
+
+
+
 ALTER TABLE ONLY "cache"."fixture_watchlist"
     ADD CONSTRAINT "fixture_watchlist_pkey" PRIMARY KEY ("fixture_id");
+
+
+
+ALTER TABLE ONLY "cache"."fixture_xg_raw"
+    ADD CONSTRAINT "fixture_xg_raw_pkey" PRIMARY KEY ("fixture_id");
 
 
 
@@ -1661,6 +1768,11 @@ ALTER TABLE ONLY "cache"."odds_prematch_index"
 
 
 
+ALTER TABLE ONLY "cache"."standings_seasons_raw"
+    ADD CONSTRAINT "standings_seasons_raw_pkey" PRIMARY KEY ("season_id");
+
+
+
 ALTER TABLE ONLY "cache"."statistics_seasons_referees_index"
     ADD CONSTRAINT "statistics_seasons_referees_index_pkey" PRIMARY KEY ("referee_id", "season_id");
 
@@ -1695,6 +1807,26 @@ CREATE INDEX "fixture_watchlist_expires_idx" ON "cache"."fixture_watchlist" USIN
 
 
 CREATE INDEX "fixture_watchlist_mode_idx" ON "cache"."fixture_watchlist" USING "btree" ("mode");
+
+
+
+CREATE INDEX "idx_fixture_expected_lineups_raw_fetched_at" ON "cache"."fixture_expected_lineups_raw" USING "btree" ("fetched_at" DESC);
+
+
+
+CREATE INDEX "idx_fixture_news_raw_fetched_at" ON "cache"."fixture_news_raw" USING "btree" ("fetched_at" DESC);
+
+
+
+CREATE INDEX "idx_fixture_predictions_raw_fetched_at" ON "cache"."fixture_predictions_raw" USING "btree" ("fetched_at" DESC);
+
+
+
+CREATE INDEX "idx_fixture_transfer_rumours_raw_fetched_at" ON "cache"."fixture_transfer_rumours_raw" USING "btree" ("fetched_at" DESC);
+
+
+
+CREATE INDEX "idx_fixture_xg_raw_fetched_at" ON "cache"."fixture_xg_raw" USING "btree" ("fetched_at" DESC);
 
 
 
@@ -1786,6 +1918,10 @@ CREATE INDEX "idx_ref_stats_raw_fetched_at" ON "cache"."statistics_seasons_refer
 
 
 
+CREATE INDEX "idx_standings_seasons_raw_fetched_at" ON "cache"."standings_seasons_raw" USING "btree" ("fetched_at" DESC);
+
+
+
 CREATE INDEX "idx_sync_runs_started_at" ON "cache"."sync_runs" USING "btree" ("started_at" DESC);
 
 
@@ -1811,6 +1947,26 @@ CREATE INDEX "idx_team_stats_index_team_id" ON "cache"."statistics_seasons_teams
 
 
 CREATE INDEX "idx_team_stats_raw_fetched_at" ON "cache"."statistics_seasons_teams_raw" USING "btree" ("fetched_at" DESC);
+
+
+
+CREATE OR REPLACE TRIGGER "trg_fixture_expected_lineups_raw_updated_at" BEFORE UPDATE ON "cache"."fixture_expected_lineups_raw" FOR EACH ROW EXECUTE FUNCTION "util"."touch_updated_at"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_fixture_news_raw_updated_at" BEFORE UPDATE ON "cache"."fixture_news_raw" FOR EACH ROW EXECUTE FUNCTION "util"."touch_updated_at"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_fixture_predictions_raw_updated_at" BEFORE UPDATE ON "cache"."fixture_predictions_raw" FOR EACH ROW EXECUTE FUNCTION "util"."touch_updated_at"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_fixture_transfer_rumours_raw_updated_at" BEFORE UPDATE ON "cache"."fixture_transfer_rumours_raw" FOR EACH ROW EXECUTE FUNCTION "util"."touch_updated_at"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_fixture_xg_raw_updated_at" BEFORE UPDATE ON "cache"."fixture_xg_raw" FOR EACH ROW EXECUTE FUNCTION "util"."touch_updated_at"();
 
 
 
@@ -1862,11 +2018,40 @@ CREATE OR REPLACE TRIGGER "trg_ref_stats_raw_updated_at" BEFORE UPDATE ON "cache
 
 
 
+CREATE OR REPLACE TRIGGER "trg_standings_seasons_raw_updated_at" BEFORE UPDATE ON "cache"."standings_seasons_raw" FOR EACH ROW EXECUTE FUNCTION "util"."touch_updated_at"();
+
+
+
 CREATE OR REPLACE TRIGGER "trg_team_stats_index_updated_at" BEFORE UPDATE ON "cache"."statistics_seasons_teams_index" FOR EACH ROW EXECUTE FUNCTION "util"."touch_updated_at"();
 
 
 
 CREATE OR REPLACE TRIGGER "trg_team_stats_raw_updated_at" BEFORE UPDATE ON "cache"."statistics_seasons_teams_raw" FOR EACH ROW EXECUTE FUNCTION "util"."touch_updated_at"();
+
+
+
+ALTER TABLE ONLY "cache"."fixture_expected_lineups_raw"
+    ADD CONSTRAINT "fixture_expected_lineups_raw_sync_run_id_fkey" FOREIGN KEY ("sync_run_id") REFERENCES "cache"."sync_runs"("id") ON DELETE SET NULL;
+
+
+
+ALTER TABLE ONLY "cache"."fixture_news_raw"
+    ADD CONSTRAINT "fixture_news_raw_sync_run_id_fkey" FOREIGN KEY ("sync_run_id") REFERENCES "cache"."sync_runs"("id") ON DELETE SET NULL;
+
+
+
+ALTER TABLE ONLY "cache"."fixture_predictions_raw"
+    ADD CONSTRAINT "fixture_predictions_raw_sync_run_id_fkey" FOREIGN KEY ("sync_run_id") REFERENCES "cache"."sync_runs"("id") ON DELETE SET NULL;
+
+
+
+ALTER TABLE ONLY "cache"."fixture_transfer_rumours_raw"
+    ADD CONSTRAINT "fixture_transfer_rumours_raw_sync_run_id_fkey" FOREIGN KEY ("sync_run_id") REFERENCES "cache"."sync_runs"("id") ON DELETE SET NULL;
+
+
+
+ALTER TABLE ONLY "cache"."fixture_xg_raw"
+    ADD CONSTRAINT "fixture_xg_raw_sync_run_id_fkey" FOREIGN KEY ("sync_run_id") REFERENCES "cache"."sync_runs"("id") ON DELETE SET NULL;
 
 
 
@@ -1892,6 +2077,11 @@ ALTER TABLE ONLY "cache"."odds_markets_raw"
 
 ALTER TABLE ONLY "cache"."odds_prematch_fixtures_bookmakers_35_raw"
     ADD CONSTRAINT "odds_prematch_fixtures_bookmakers_35_raw_sync_run_id_fkey" FOREIGN KEY ("sync_run_id") REFERENCES "cache"."sync_runs"("id") ON DELETE SET NULL;
+
+
+
+ALTER TABLE ONLY "cache"."standings_seasons_raw"
+    ADD CONSTRAINT "standings_seasons_raw_sync_run_id_fkey" FOREIGN KEY ("sync_run_id") REFERENCES "cache"."sync_runs"("id") ON DELETE SET NULL;
 
 
 

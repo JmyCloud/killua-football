@@ -6,6 +6,7 @@ import { isAuthorized, unauthorized } from "@/lib/admin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 const BOOKMAKER_ID = 35;
 const INCLUDE = "market";

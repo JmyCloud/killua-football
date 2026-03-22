@@ -6,6 +6,7 @@ import { isAuthorized, unauthorized } from "@/lib/admin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 async function getCached(fixtureId, dbQuery = query) {
   const result = await dbQuery(
@@ -29,23 +30,24 @@ async function refresh(fixtureId, dbQuery = query) {
   if (!syncId) throw new Error("Failed to create sync run");
 
   try {
-    const [probPages, vbPages] = await Promise.all([
-      fetchAllSportMonksPages(
-        `predictions/probabilities/fixtures/${fixtureId}`,
-        { per_page: 50, page: 1 }
-      ),
-      fetchAllSportMonksPages(
-        `predictions/value-bets/fixtures/${fixtureId}`,
-        { per_page: 50, page: 1 }
-      ).catch(() => []),
-    ]);
-
-    const probabilities = probPages.flatMap(
-      (p) => p.payload?.data ?? []
-    );
-    const valueBets = vbPages.flatMap(
-      (p) => p.payload?.data ?? []
-    );
+    let probabilities = [];
+    let valueBets = [];
+    try {
+      const [probPages, vbPages] = await Promise.all([
+        fetchAllSportMonksPages(
+          `predictions/probabilities/fixtures/${fixtureId}`,
+          { per_page: 50, page: 1 }
+        ).catch(() => []),
+        fetchAllSportMonksPages(
+          `predictions/value-bets/fixtures/${fixtureId}`,
+          { per_page: 50, page: 1 }
+        ).catch(() => []),
+      ]);
+      probabilities = probPages.flatMap((p) => p.payload?.data ?? []);
+      valueBets = vbPages.flatMap((p) => p.payload?.data ?? []);
+    } catch {
+      // Predictions may not be available for this fixture or plan
+    }
 
     const combined = { probabilities, value_bets: valueBets };
 

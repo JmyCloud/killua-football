@@ -11,6 +11,7 @@ import {
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 export async function POST(request, context) {
   const requestId = getRequestId(request);
@@ -45,7 +46,7 @@ const liveRefreshMode = parseEnumParam(
     const result = await adminJson(
       request,
       `/sync/analysis/fixtures/${fixtureId}?${qs.toString()}`,
-      { method: "POST" }
+      { method: "POST", timeout: 55000 }
     );
 
     if (!result.ok) {
