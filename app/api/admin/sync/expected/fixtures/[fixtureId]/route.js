@@ -30,12 +30,11 @@ async function refresh(fixtureId, dbQuery = query) {
 
   try {
     const pages = await fetchAllSportMonksPages(
-      `expected/fixtures`,
+      `expected/fixtures/${fixtureId}`,
       {
         per_page: 50,
         page: 1,
         include: "type;participant",
-        filters: `fixtureExpectedFixtures:${fixtureId}`,
       }
     );
 

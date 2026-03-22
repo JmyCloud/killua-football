@@ -11,6 +11,7 @@ import {
   getFixturePredictions,
   getFixtureNews,
   getFixtureExpectedLineups,
+  getFixtureTransferRumours,
   getSeasonStandings,
   isFixtureLiveLike,
   getPackSafeReadConfig,
@@ -90,13 +91,14 @@ export async function GET(request, context) {
       ? await getCurrentRefereeStats(actors.referee_id)
       : null;
 
-    const [prematchOdds, xgData, predictionsData, newsData, expectedLineupsData, standingsData] =
+    const [prematchOdds, xgData, predictionsData, newsData, expectedLineupsData, transferRumoursData, standingsData] =
       await Promise.all([
         getOddsSummary(id, "prematch"),
         getFixtureXg(id),
         getFixturePredictions(id),
         getFixtureNews(id),
         getFixtureExpectedLineups(id),
+        getFixtureTransferRumours(id),
         actors.season_id ? getSeasonStandings(actors.season_id) : null,
       ]);
     const liveLike = isFixtureLiveLike(actors.state);
@@ -205,6 +207,13 @@ export async function GET(request, context) {
         label: getPackDetails("fixture_expected_lineups")?.label ?? null,
         analysis_focus: getPackDetails("fixture_expected_lineups")?.analysis_focus ?? [],
         ready: Boolean(expectedLineupsData?.payload?.data?.length),
+      }),
+      withSafeReadMeta("fixture_transfer_rumours", {
+        name: "fixture_transfer_rumours",
+        family: "fixture",
+        label: getPackDetails("fixture_transfer_rumours")?.label ?? null,
+        analysis_focus: getPackDetails("fixture_transfer_rumours")?.analysis_focus ?? [],
+        ready: Boolean(transferRumoursData?.payload?.data?.length),
       }),
       withSafeReadMeta("h2h_context", {
         name: "h2h_context",

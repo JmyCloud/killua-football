@@ -248,7 +248,7 @@
               "enum": [
                 "fixture_context", "fixture_squads", "fixture_events_scores",
                 "fixture_statistics", "fixture_periods",
-                "fixture_xg", "fixture_predictions", "fixture_news", "fixture_expected_lineups",
+                "fixture_xg", "fixture_predictions", "fixture_news", "fixture_expected_lineups", "fixture_transfer_rumours",
                 "h2h_context", "h2h_events", "h2h_statistics", "h2h_referees",
                 "home_team_all", "away_team_all", "referee_all",
                 "league_standings",

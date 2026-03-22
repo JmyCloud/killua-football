@@ -1,0 +1,808 @@
+openapi: 3.1.0
+info:
+  title: Killua Football GPT Gateway
+  version: 3.3.0
+  description: Private GPT-facing gateway with premium SportMonks data. Provides fixture browsing, league discovery, data preparation (including xG, predictions, news, expected lineups, league standings), pack-based analysis reading, market search, and filtered detailed odds (1xBet).
+
+servers:
+  - url: https://killua-football.vercel.app/api/gpt
+
+security:
+  - gptSecret: []
+
+components:
+  securitySchemes:
+    gptSecret:
+      type: apiKey
+      in: header
+      name: x-gpt-secret
+
+  schemas:
+    GenericObject:
+      type: object
+      description: Flexible object container for gateway responses.
+      properties:
+        _placeholder:
+          type: string
+          description: Placeholder property to satisfy Actions schema validation.
+      additionalProperties: true
+
+    ErrorResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          example: false
+        error:
+          type: string
+        code:
+          type:
+            - string
+            - "null"
+        detail:
+          oneOf:
+            - type: string
+            - type: "null"
+            - $ref: "#/components/schemas/GenericObject"
+      required:
+        - ok
+        - error
+      additionalProperties: true
+
+    PackName:
+      type: string
+      enum:
+        - fixture_context
+        - fixture_squads
+        - fixture_events_scores
+        - fixture_statistics
+        - fixture_periods
+        - fixture_xg
+        - fixture_predictions
+        - fixture_news
+        - fixture_expected_lineups
+        - fixture_transfer_rumours
+        - h2h_context
+        - h2h_events
+        - h2h_statistics
+        - h2h_referees
+        - home_team_all
+        - away_team_all
+        - referee_all
+        - league_standings
+        - odds_prematch_summary
+        - odds_inplay_summary
+
+    PrepareResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        fixture_id:
+          type: integer
+        discovered:
+          $ref: "#/components/schemas/GenericObject"
+        match_is_live_like:
+          type: boolean
+        refresh_policy:
+          $ref: "#/components/schemas/GenericObject"
+        sync_results:
+          type: array
+          items:
+            $ref: "#/components/schemas/GenericObject"
+        failed_steps:
+          type: array
+          items:
+            type: string
+        next:
+          $ref: "#/components/schemas/GenericObject"
+        request_id:
+          type:
+            - string
+            - "null"
+      required:
+        - ok
+      additionalProperties: true
+
+    ManifestResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        fixture_id:
+          type: integer
+        default_mode:
+          type: string
+        discovered:
+          $ref: "#/components/schemas/GenericObject"
+        state:
+          $ref: "#/components/schemas/GenericObject"
+        match_is_live_like:
+          type: boolean
+        default_read_order:
+          type: array
+          items:
+            $ref: "#/components/schemas/PackName"
+        packs:
+          type: array
+          items:
+            $ref: "#/components/schemas/GenericObject"
+        analysis_blueprint:
+          $ref: "#/components/schemas/GenericObject"
+        coverage:
+          $ref: "#/components/schemas/GenericObject"
+        notes:
+          type: array
+          items:
+            type: string
+        request_id:
+          type:
+            - string
+            - "null"
+      required:
+        - ok
+      additionalProperties: true
+
+    PackResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        fixture_id:
+          type: integer
+        pack:
+          $ref: "#/components/schemas/PackName"
+        family:
+          type: string
+        label:
+          type: string
+        contains:
+          type: array
+          items:
+            type: string
+        analysis_focus:
+          type: array
+          items:
+            type: string
+        read_mode:
+          type:
+            - string
+            - "null"
+        safe_read:
+          $ref: "#/components/schemas/GenericObject"
+        paging:
+          $ref: "#/components/schemas/GenericObject"
+        coverage:
+          $ref: "#/components/schemas/GenericObject"
+        data:
+          $ref: "#/components/schemas/GenericObject"
+        request_id:
+          type:
+            - string
+            - "null"
+      required:
+        - ok
+      additionalProperties: true
+
+    MarketItem:
+      type: object
+      properties:
+        market_id:
+          type: integer
+        name:
+          type:
+            - string
+            - "null"
+        developer_name:
+          type:
+            - string
+            - "null"
+        legacy_id:
+          type:
+            - integer
+            - "null"
+        has_winning_calculations:
+          type:
+            - boolean
+            - "null"
+      required:
+        - market_id
+      additionalProperties: true
+
+    MarketSearchResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        count:
+          type:
+            - integer
+            - "null"
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/MarketItem"
+        request_id:
+          type:
+            - string
+            - "null"
+      required:
+        - ok
+      additionalProperties: true
+
+    FixtureOddsMarket:
+      type: object
+      properties:
+        market_id:
+          type: integer
+        market_name:
+          type:
+            - string
+            - "null"
+        developer_name:
+          type:
+            - string
+            - "null"
+        legacy_id:
+          type:
+            - integer
+            - "null"
+        has_winning_calculations:
+          type:
+            - boolean
+            - "null"
+        market_description:
+          type:
+            - string
+            - "null"
+        odds_count:
+          type:
+            - integer
+            - "null"
+        fetched_at:
+          type:
+            - string
+            - "null"
+        odds:
+          oneOf:
+            - type: array
+              items:
+                $ref: "#/components/schemas/GenericObject"
+            - type: "null"
+      required:
+        - market_id
+      additionalProperties: true
+
+    FixtureOddsResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        fixture_id:
+          type: integer
+        mode:
+          type: string
+          enum:
+            - prematch
+            - inplay
+        market_ids:
+          oneOf:
+            - type: array
+              items:
+                type: integer
+            - type: "null"
+        markets_available:
+          type:
+            - integer
+            - "null"
+        markets_found:
+          type:
+            - integer
+            - "null"
+        usage_hint:
+          type:
+            - string
+            - "null"
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/FixtureOddsMarket"
+        request_id:
+          type:
+            - string
+            - "null"
+      required:
+        - ok
+      additionalProperties: true
+
+paths:
+  /fixtures:
+    get:
+      operationId: listFixtures
+      summary: Browse upcoming, live, or recent fixtures from the watchlist
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - upcoming
+              - live
+              - recent
+            default: upcoming
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Search by team name or league name
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 50
+      responses:
+        "200":
+          description: List of matching fixtures
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  request_id:
+                    type:
+                      - string
+                      - "null"
+                  status_filter:
+                    type: string
+                  search:
+                    type:
+                      - string
+                      - "null"
+                  total:
+                    type: integer
+                  fixtures:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        fixture_id:
+                          type: integer
+                        home_team:
+                          type: string
+                        away_team:
+                          type: string
+                        league:
+                          type: string
+                        season:
+                          type:
+                            - string
+                            - "null"
+                        starts_at:
+                          type:
+                            - string
+                            - "null"
+                          format: date-time
+                        match_state:
+                          type:
+                            - string
+                            - "null"
+                        is_live:
+                          type: boolean
+                        data_ready:
+                          type: boolean
+                      required:
+                        - fixture_id
+                      additionalProperties: true
+                required:
+                  - ok
+                additionalProperties: true
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /leagues:
+    get:
+      operationId: listLeagues
+      summary: Browse leagues with upcoming fixtures in the watchlist
+      parameters:
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Search by league name
+      responses:
+        "200":
+          description: List of leagues with fixture counts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  request_id:
+                    type:
+                      - string
+                      - "null"
+                  total:
+                    type: integer
+                  leagues:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        league_id:
+                          type: integer
+                        league_name:
+                          type:
+                            - string
+                            - "null"
+                        season_name:
+                          type:
+                            - string
+                            - "null"
+                        fixture_count:
+                          type: integer
+                        next_kickoff:
+                          type:
+                            - string
+                            - "null"
+                          format: date-time
+                      required:
+                        - league_id
+                      additionalProperties: true
+                required:
+                  - ok
+                additionalProperties: true
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /fixtures/{fixtureId}/prepare:
+    post:
+      operationId: prepareFixtureAnalysis
+      summary: Sync all analysis data for a fixture including premium data (xG, predictions, news, expected lineups, league standings)
+      parameters:
+        - name: fixtureId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: h2h_limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 5
+            minimum: 1
+            maximum: 20
+        - name: refresh_mode
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - swr
+              - fresh_if_stale
+              - force_fresh
+            default: fresh_if_stale
+        - name: live_refresh_mode
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - swr
+              - fresh_if_stale
+              - force_fresh
+            default: fresh_if_stale
+      responses:
+        "200":
+          description: Fixture preparation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PrepareResponse"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /fixtures/{fixtureId}/manifest:
+    get:
+      operationId: getFixtureAnalysisManifest
+      summary: Get discovered IDs, ready packs, default read order, and safe-read guidance
+      parameters:
+        - name: fixtureId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Analysis manifest
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ManifestResponse"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /fixtures/{fixtureId}/packs/{pack}:
+    get:
+      operationId: getFixtureAnalysisPack
+      summary: Read one analysis pack for a fixture
+      parameters:
+        - name: fixtureId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: pack
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/PackName"
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 5
+            minimum: 1
+            maximum: 20
+        - name: read_mode
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - full
+              - safe
+            default: full
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: page_size
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 400
+      responses:
+        "200":
+          description: Pack payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PackResponse"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Missing pack data or missing discovered actors
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /markets:
+    get:
+      operationId: searchMarkets
+      summary: Search available betting markets by keyword
+      parameters:
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+            description: Keyword search such as fulltime, double chance, over under, btts, asian handicap
+      responses:
+        "200":
+          description: Matching market definitions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketSearchResponse"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /fixtures/{fixtureId}/odds/pre-match:
+    get:
+      operationId: getFixturePrematchOdds
+      summary: Read prematch odds summary or filtered detailed odds for selected market ids
+      parameters:
+        - name: fixtureId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: market_ids
+          in: query
+          required: false
+          schema:
+            type: string
+            description: Comma-separated market ids, for example 1,2,5
+        - name: filter
+          in: query
+          required: false
+          schema:
+            type: string
+            description: Filter syntax, for example market:1,2,5
+      responses:
+        "200":
+          description: Prematch odds payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FixtureOddsResponse"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Missing odds data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /fixtures/{fixtureId}/odds/inplay:
+    get:
+      operationId: getFixtureInplayOdds
+      summary: Read inplay odds summary or filtered detailed odds for selected market ids
+      parameters:
+        - name: fixtureId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: market_ids
+          in: query
+          required: false
+          schema:
+            type: string
+            description: Comma-separated market ids, for example 1,2,5
+        - name: filter
+          in: query
+          required: false
+          schema:
+            type: string
+            description: Filter syntax, for example market:1,2,5
+      responses:
+        "200":
+          description: Inplay odds payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FixtureOddsResponse"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Missing odds data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"

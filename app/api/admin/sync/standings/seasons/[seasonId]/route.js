@@ -7,7 +7,7 @@ import { isAuthorized, unauthorized } from "@/lib/admin";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const INCLUDE = "participant;season;league;stage;round;group;rule;details.type";
+const INCLUDE = "participant;season;league;stage;round;group;rule;details.type;form";
 
 async function getCached(seasonId, dbQuery = query) {
   const result = await dbQuery(

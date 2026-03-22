@@ -8,10 +8,12 @@ import { resolveFixtureActors } from "@/lib/analysis";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const INCLUDE = "player;type;fromTeam;toTeam;position";
+
 async function getCached(fixtureId, dbQuery = query) {
   const result = await dbQuery(
     `select payload as data, fetched_at
-     from cache.fixture_expected_lineups_raw
+     from cache.fixture_transfer_rumours_raw
      where fixture_id = $1
      order by fetched_at desc
      limit 1`,
@@ -24,7 +26,7 @@ async function refresh(fixtureId, dbQuery = query) {
   const syncResult = await dbQuery(
     `insert into cache.sync_runs (target_table, scope_key, status)
      values ($1, $2, 'running') returning id`,
-    ["fixture_expected_lineups_raw", `fixture:${fixtureId}`]
+    ["fixture_transfer_rumours_raw", `fixture:${fixtureId}`]
   );
   const syncId = syncResult.rows[0]?.id;
   if (!syncId) throw new Error("Failed to create sync run");
@@ -33,28 +35,32 @@ async function refresh(fixtureId, dbQuery = query) {
     const actors = await resolveFixtureActors(fixtureId);
     const teamIds = [actors.home_team_id, actors.away_team_id].filter(Boolean);
 
-    const allLineups = [];
+    const allRumours = [];
 
     for (const teamId of teamIds) {
       try {
         const pages = await fetchAllSportMonksPages(
-          `expected-lineups/teams/${teamId}`,
-          { per_page: 50, page: 1, include: "type;fixture;participant" }
+          `transfer-rumours/teams/${teamId}`,
+          { per_page: 50, page: 1, include: INCLUDE }
         );
 
         const items = pages.flatMap((p) => p.payload?.data ?? []);
-        const forFixture = items.filter(
-          (item) => Number(item.fixture_id) === Number(fixtureId)
-        );
-
-        allLineups.push(...forFixture);
+        allRumours.push(...items);
       } catch {
-        // Team might not have expected lineups available
+        // Team might not have transfer rumours available
       }
     }
 
+    // Deduplicate by rumour id
+    const seen = new Set();
+    const unique = allRumours.filter((r) => {
+      if (seen.has(r.id)) return false;
+      seen.add(r.id);
+      return true;
+    });
+
     await dbQuery(
-      `insert into cache.fixture_expected_lineups_raw
+      `insert into cache.fixture_transfer_rumours_raw
          (fixture_id, payload, fetched_at, sync_run_id)
        values ($1, $2::jsonb, now(), $3)
        on conflict (fixture_id) do update set
@@ -62,7 +68,7 @@ async function refresh(fixtureId, dbQuery = query) {
          fetched_at  = excluded.fetched_at,
          sync_run_id = excluded.sync_run_id,
          updated_at  = now()`,
-      [fixtureId, JSON.stringify({ data: allLineups }), syncId]
+      [fixtureId, JSON.stringify({ data: unique }), syncId]
     );
 
     await dbQuery(
@@ -93,11 +99,11 @@ export async function POST(request, context) {
     const id = Number(fixtureId);
 
     const result = await staleWhileRevalidate({
-      type: "fixture_expected_lineups",
+      type: "fixture_transfer_rumours",
       getCached: (dbQuery) => getCached(id, dbQuery),
       refresh: (dbQuery) => refresh(id, dbQuery),
       mode: refreshMode,
-      lockKey: `sync:expected_lineups:${id}`,
+      lockKey: `sync:transfer_rumours:${id}`,
     });
 
     return NextResponse.json({

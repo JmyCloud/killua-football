@@ -12,6 +12,7 @@ import {
   getFixturePredictions,
   getFixtureNews,
   getFixtureExpectedLineups,
+  getFixtureTransferRumours,
   getSeasonStandings,
   resolveFixtureActors,
   parsePackReadParams,
@@ -146,6 +147,17 @@ export async function GET(request, context) {
 
     if (pack === "fixture_expected_lineups") {
       const row = await getFixtureExpectedLineups(id);
+      return NextResponse.json({
+        ok: true,
+        fixture_id: id,
+        ...meta,
+        data: row?.payload ?? { data: [] },
+        fetched_at: row?.fetched_at ?? null,
+      });
+    }
+
+    if (pack === "fixture_transfer_rumours") {
+      const row = await getFixtureTransferRumours(id);
       return NextResponse.json({
         ok: true,
         fixture_id: id,

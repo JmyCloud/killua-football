@@ -161,6 +161,11 @@ export async function POST(request, context) {
       path: `/sync/expected-lineups/fixtures/${id}?refresh_mode=${refreshMode}`,
     });
 
+    premiumSteps.push({
+      step: "sync_transfer_rumours",
+      path: `/sync/transfer-rumours/fixtures/${id}?refresh_mode=${refreshMode}`,
+    });
+
     // ── parallel batch 3: odds ──
     const oddsSteps = [];
 
