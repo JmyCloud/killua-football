@@ -182,11 +182,11 @@ async function fetchInplayLivescores() {
   return items;
 }
 
-async function upsertAutoLiveItems(items) {
+async function upsertAutoLiveItems(items, dbQuery = query) {
   const saved = [];
 
   for (const item of items) {
-    const result = await query(
+    const result = await dbQuery(
       `
       insert into cache.fixture_watchlist (
         fixture_id,
@@ -309,11 +309,11 @@ export async function POST(request) {
   const lockKey = "job:live-booster";
 
   try {
-    const lock = await tryWithAdvisoryLock(lockKey, async () => {
+    const lock = await tryWithAdvisoryLock(lockKey, async (dbQuery) => {
       const input = parseInputs(request);
       const preview = await buildPreview(input);
 
-      const saved = await upsertAutoLiveItems(preview.candidates);
+      const saved = await upsertAutoLiveItems(preview.candidates, dbQuery);
       const liveFixtureIds = preview.candidates.map((x) => x.fixture_id);
 
       const warm =

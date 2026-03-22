@@ -44,7 +44,7 @@ async function refresh(fixtureId, dbQuery = query) {
     );
 
     for (const page of pages) {
-      await query(
+      await dbQuery(
         `insert into cache.odds_prematch_fixtures_bookmakers_35_raw
            (fixture_id, bookmaker_id, page_number, payload, pagination, fetched_at, sync_run_id)
          values ($1, $2, $3, $4::jsonb, $5::jsonb, now(), $6)
@@ -64,17 +64,17 @@ async function refresh(fixtureId, dbQuery = query) {
       );
     }
 
-    await query(
+    await dbQuery(
       `update cache.sync_runs set status = 'done', finished_at = now() where id = $1`,
       [syncId]
     );
 
-    await query(
+    await dbQuery(
       `select cache.rebuild_odds_prematch_index($1)`,
       [fixtureId]
     );
   } catch (err) {
-    await query(
+    await dbQuery(
       `update cache.sync_runs set status = 'failed', notes = $1, finished_at = now() where id = $2`,
       [err.message?.slice(0, 4000), syncId]
     );

@@ -46,7 +46,7 @@ async function refresh(fixtureId, dbQuery = query) {
     const resolvedFixtureId = Number(payload?.data?.id ?? fixtureId);
     if (!resolvedFixtureId) throw new Error("Fixture payload missing data.id");
 
-    await query(
+    await dbQuery(
       `insert into cache.fixtures_raw (
          fixture_id, page_number, payload, pagination, fetched_at, sync_run_id
        )
@@ -66,19 +66,19 @@ async function refresh(fixtureId, dbQuery = query) {
       ]
     );
 
-    await query(
+    await dbQuery(
       `select cache.rebuild_fixture_index($1)`,
       [resolvedFixtureId]
     );
 
-    await query(
+    await dbQuery(
       `update cache.sync_runs
        set status = 'done', finished_at = now()
        where id = $1`,
       [syncId]
     );
   } catch (err) {
-    await query(
+    await dbQuery(
       `update cache.sync_runs
        set status = 'failed', notes = $1, finished_at = now()
        where id = $2`,

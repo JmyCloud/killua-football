@@ -43,7 +43,7 @@ async function refresh(refereeId, dbQuery = query) {
     );
 
     for (const page of pages) {
-      await query(
+      await dbQuery(
         `insert into cache.statistics_seasons_referees_raw
            (referee_id, page_number, payload, pagination, fetched_at, sync_run_id)
          values ($1, $2, $3::jsonb, $4::jsonb, now(), $5)
@@ -63,17 +63,17 @@ async function refresh(refereeId, dbQuery = query) {
       );
     }
 
-    await query(
+    await dbQuery(
       `update cache.sync_runs set status = 'done', finished_at = now() where id = $1`,
       [syncId]
     );
 
-    await query(
+    await dbQuery(
       `select cache.rebuild_referee_stats_index($1)`,
       [refereeId]
     );
   } catch (err) {
-    await query(
+    await dbQuery(
       `update cache.sync_runs set status = 'failed', notes = $1, finished_at = now() where id = $2`,
       [err.message?.slice(0, 4000), syncId]
     );
