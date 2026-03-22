@@ -211,7 +211,7 @@ export async function POST(request, context) {
     );
 
     return NextResponse.json({
-      ok: true,
+      ok: failed_steps.length === 0,
       fixture_id: id,
       discovered: {
         home_team_id: homeTeamId,
