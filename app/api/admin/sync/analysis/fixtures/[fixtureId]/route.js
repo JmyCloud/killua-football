@@ -21,6 +21,29 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
+async function runWithConcurrency(tasks, limit, fixtureId, log) {
+  const results = new Array(tasks.length);
+  let nextIndex = 0;
+
+  async function worker() {
+    while (nextIndex < tasks.length) {
+      const idx = nextIndex++;
+      const task = tasks[idx];
+      try {
+        const result = await task.fn();
+        results[idx] = { step: task.step, ok: true, ...result };
+      } catch (error) {
+        log.exception("Sync step failed", error, { step: task.step, fixture_id: fixtureId });
+        results[idx] = { step: task.step, ok: false, error: error?.message ?? "Unknown sync error" };
+      }
+    }
+  }
+
+  const workers = Array.from({ length: Math.min(limit, tasks.length) }, () => worker());
+  await Promise.all(workers);
+  return results;
+}
+
 function parseH2HLimit(searchParams) {
   const raw = searchParams.get("h2h_limit");
   if (!raw) return 5;
@@ -116,23 +139,11 @@ export async function POST(request, context) {
       tasks.push({ step: "sync_odds_inplay", fn: () => syncOddsInplay(id, liveRefreshMode) });
     }
 
-    const settled = await Promise.allSettled(
-      tasks.map(async (task) => {
-        try {
-          const result = await task.fn();
-          return { step: task.step, ok: true, ...result };
-        } catch (error) {
-          logger.exception("Sync step failed", error, { step: task.step, fixture_id: id });
-          return { step: task.step, ok: false, error: error?.message ?? "Unknown sync error" };
-        }
-      })
-    );
-
-    const sync_results = settled.map((s) =>
-      s.status === "fulfilled"
-        ? s.value
-        : { step: "unknown", ok: false, error: s.reason?.message ?? "Promise rejected" }
-    );
+    // Concurrency limiter — max 2 syncs at a time to avoid
+    // exceeding Supabase session-mode connection limit.
+    // Each sync holds a DB connection (advisory lock) for its full duration.
+    const CONCURRENCY = 2;
+    const sync_results = await runWithConcurrency(tasks, CONCURRENCY, id, logger);
 
     const failed_steps = sync_results.filter((r) => !r.ok).map((r) => r.step);
 
