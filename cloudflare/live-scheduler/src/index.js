@@ -25,7 +25,22 @@ function getControlToken(request) {
 }
 
 function isAuthorized(request, env) {
-  return getControlToken(request) === String(env.CONTROL_TOKEN || "");
+  const expected = String(env.CONTROL_TOKEN || "").trim();
+  if (!expected) return false;
+  const provided = getControlToken(request);
+  if (!provided) return false;
+  if (expected.length !== provided.length) return false;
+
+  const enc = new TextEncoder();
+  const a = enc.encode(expected);
+  const b = enc.encode(provided);
+
+  // constant-time comparison
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) {
+    diff |= a[i] ^ b[i];
+  }
+  return diff === 0;
 }
 
 async function readJsonSafe(response) {
@@ -67,6 +82,32 @@ async function hitVercel(env) {
   return body;
 }
 
+async function hitVercelCron(env, path) {
+  const cronSecret = String(env.TARGET_CRON_SECRET || "").trim();
+  if (!cronSecret) throw new Error("Missing TARGET_CRON_SECRET");
+
+  const url = new URL(path, env.TARGET_BASE_URL);
+
+  const response = await fetch(url.toString(), {
+    method: "GET",
+    headers: {
+      "accept": "application/json",
+      "authorization": `Bearer ${cronSecret}`
+    }
+  });
+
+  const body = await readJsonSafe(response);
+
+  if (!response.ok) {
+    throw new Error(body?.error || `HTTP ${response.status}`);
+  }
+
+  return body;
+}
+
+const WATCHLIST_INTERVAL_HOURS = 4;
+const MAINTENANCE_INTERVAL_HOURS = 24;
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -81,6 +122,33 @@ export default {
 
     const stub = env.LIVE_LOOP.getByName("singleton");
     return stub.fetch(request);
+  },
+
+  async scheduled(event, env, ctx) {
+    const nowHour = new Date(event.scheduledTime).getUTCHours();
+    const results = {};
+
+    if (nowHour % WATCHLIST_INTERVAL_HOURS === 0) {
+      try {
+        results.watchlist = await hitVercelCron(env, "/api/cron/watchlist");
+      } catch (err) {
+        results.watchlist = { ok: false, error: err?.message ?? "Unknown" };
+        console.error("[cron] watchlist failed:", err?.message);
+      }
+    }
+
+    if (nowHour % MAINTENANCE_INTERVAL_HOURS === 0) {
+      try {
+        results.maintenance = await hitVercelCron(env, "/api/cron/maintenance");
+      } catch (err) {
+        results.maintenance = { ok: false, error: err?.message ?? "Unknown" };
+        console.error("[cron] maintenance failed:", err?.message);
+      }
+    }
+
+    if (Object.keys(results).length > 0) {
+      console.log("[cron] scheduled results:", JSON.stringify(results));
+    }
   }
 };
 

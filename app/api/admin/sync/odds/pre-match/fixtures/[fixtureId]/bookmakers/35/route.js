@@ -2,19 +2,13 @@ import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { fetchAllSportMonksPages } from "@/lib/sportmonks";
 import { staleWhileRevalidate, parseRefreshMode } from "@/lib/cache";
+import { isAuthorized, unauthorized } from "@/lib/admin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const BOOKMAKER_ID = 35;
 const INCLUDE = "market";
-
-function isAuthorized(request) {
-  const expected = process.env.PROXY_SHARED_SECRET;
-  const provided = request.headers.get("x-admin-secret");
-  if (!expected) throw new Error("Missing PROXY_SHARED_SECRET");
-  return provided === expected;
-}
 
 async function getCached(fixtureId, dbQuery = query) {
   const result = await dbQuery(
@@ -52,7 +46,8 @@ async function refresh(fixtureId, dbQuery = query) {
            payload     = excluded.payload,
            pagination  = excluded.pagination,
            fetched_at  = excluded.fetched_at,
-           sync_run_id = excluded.sync_run_id`,
+           sync_run_id = excluded.sync_run_id,
+           updated_at  = now()`,
         [
           fixtureId,
           BOOKMAKER_ID,
@@ -65,13 +60,13 @@ async function refresh(fixtureId, dbQuery = query) {
     }
 
     await dbQuery(
-      `update cache.sync_runs set status = 'done', finished_at = now() where id = $1`,
-      [syncId]
+      `select cache.rebuild_odds_prematch_index($1)`,
+      [fixtureId]
     );
 
     await dbQuery(
-      `select cache.rebuild_odds_prematch_index($1)`,
-      [fixtureId]
+      `update cache.sync_runs set status = 'done', finished_at = now() where id = $1`,
+      [syncId]
     );
   } catch (err) {
     await dbQuery(
@@ -83,9 +78,7 @@ async function refresh(fixtureId, dbQuery = query) {
 }
 
 export async function POST(request, context) {
-  if (!isAuthorized(request)) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-  }
+  if (!isAuthorized(request)) return unauthorized();
 
   const { fixtureId } = await context.params;
   if (!/^\d+$/.test(String(fixtureId))) {

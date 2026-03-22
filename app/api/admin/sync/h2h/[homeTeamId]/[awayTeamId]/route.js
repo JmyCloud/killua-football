@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
-import { fetchSportMonksPage } from "@/lib/sportmonks";
+import { fetchAllSportMonksPages } from "@/lib/sportmonks";
 import { staleWhileRevalidate, parseRefreshMode } from "@/lib/cache";
 import { normalizeH2HPair } from "@/lib/analysis";
+import { isAuthorized, unauthorized } from "@/lib/admin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,13 +13,6 @@ const INCLUDE =
 
 const DEFAULT_LIMIT = 5;
 const MAX_LIMIT = 50;
-
-function isAuthorized(request) {
-  const expected = process.env.PROXY_SHARED_SECRET;
-  const provided = request.headers.get("x-admin-secret");
-  if (!expected) throw new Error("Missing PROXY_SHARED_SECRET");
-  return provided === expected;
-}
 
 function parseLimit(searchParams) {
   const raw = searchParams.get("limit");
@@ -56,42 +50,48 @@ async function refresh(homeTeamId, awayTeamId, limit, dbQuery = query) {
   if (!syncId) throw new Error("Failed to create sync run");
 
   try {
-    const payload = await fetchSportMonksPage(
+    const pages = await fetchAllSportMonksPages(
       `fixtures/head-to-head/${homeTeamId}/${awayTeamId}`,
       {
         include: INCLUDE,
-        per_page: limit,
-        page: 1,
+        per_page: Math.min(limit, 50),
         sortBy: "starting_at",
         order: "desc",
       }
     );
 
-    await dbQuery(
-      `insert into cache.fixtures_head_to_head_raw
-         (home_team_id, away_team_id, page_number, payload, pagination, fetched_at, sync_run_id)
-       values ($1, $2, $3, $4::jsonb, $5::jsonb, now(), $6)
-       on conflict (home_team_id, away_team_id, page_number) do update set
-         payload     = excluded.payload,
-         pagination  = excluded.pagination,
-         fetched_at  = excluded.fetched_at,
-         sync_run_id = excluded.sync_run_id,
-         updated_at  = now()`,
-      [
-        pair.home_team_id,
-        pair.away_team_id,
-        1,
-        JSON.stringify(payload),
-        JSON.stringify(payload?.pagination ?? null),
-        syncId,
-      ]
-    );
+    for (const page of pages) {
+      await dbQuery(
+        `insert into cache.fixtures_head_to_head_raw
+           (home_team_id, away_team_id, page_number, payload, pagination, fetched_at, sync_run_id)
+         values ($1, $2, $3, $4::jsonb, $5::jsonb, now(), $6)
+         on conflict (home_team_id, away_team_id, page_number) do update set
+           payload     = excluded.payload,
+           pagination  = excluded.pagination,
+           fetched_at  = excluded.fetched_at,
+           sync_run_id = excluded.sync_run_id,
+           updated_at  = now()`,
+        [
+          pair.home_team_id,
+          pair.away_team_id,
+          page.page_number,
+          JSON.stringify(page.payload),
+          JSON.stringify(page.pagination),
+          syncId,
+        ]
+      );
+    }
 
     await dbQuery(
       `delete from cache.fixtures_head_to_head_raw
        where home_team_id = $1
          and away_team_id = $2
-         and page_number > 1`,
+         and page_number > $3`,
+      [pair.home_team_id, pair.away_team_id, pages.length]
+    );
+
+    await dbQuery(
+      `select cache.rebuild_h2h_index($1, $2)`,
       [pair.home_team_id, pair.away_team_id]
     );
 
@@ -100,11 +100,6 @@ async function refresh(homeTeamId, awayTeamId, limit, dbQuery = query) {
        set status = 'done', finished_at = now()
        where id = $1`,
       [syncId]
-    );
-
-    await dbQuery(
-      `select cache.rebuild_h2h_index($1, $2)`,
-      [pair.home_team_id, pair.away_team_id]
     );
   } catch (err) {
     await dbQuery(
@@ -118,9 +113,7 @@ async function refresh(homeTeamId, awayTeamId, limit, dbQuery = query) {
 }
 
 export async function POST(request, context) {
-  if (!isAuthorized(request)) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-  }
+  if (!isAuthorized(request)) return unauthorized();
 
   const { homeTeamId, awayTeamId } = await context.params;
   if (!/^\d+$/.test(String(homeTeamId)) || !/^\d+$/.test(String(awayTeamId))) {

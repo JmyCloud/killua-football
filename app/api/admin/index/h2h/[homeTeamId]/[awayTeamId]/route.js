@@ -3,6 +3,7 @@ import {
   getH2HChunkRows,
   normalizeH2HPair,
 } from "@/lib/analysis";
+import { isAuthorized, unauthorized } from "@/lib/admin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,13 +19,6 @@ const VALID_CHUNKS = new Set([
 
 const DEFAULT_LIMIT = 5;
 const MAX_LIMIT = 50;
-
-function isAuthorized(request) {
-  const expected = process.env.PROXY_SHARED_SECRET;
-  const provided = request.headers.get("x-admin-secret");
-  if (!expected) throw new Error("Missing PROXY_SHARED_SECRET");
-  return provided === expected;
-}
 
 function parseLimit(searchParams) {
   const raw = searchParams.get("limit");
@@ -43,9 +37,7 @@ function parseExcludeFixtureId(searchParams) {
 }
 
 export async function GET(request, context) {
-  if (!isAuthorized(request)) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-  }
+  if (!isAuthorized(request)) return unauthorized();
 
   const { homeTeamId, awayTeamId } = await context.params;
   if (!/^\d+$/.test(String(homeTeamId)) || !/^\d+$/.test(String(awayTeamId))) {

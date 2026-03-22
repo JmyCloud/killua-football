@@ -37,7 +37,7 @@ export async function GET(request, context) {
   const pageSize =
     pageSizeRaw == null || pageSizeRaw === ""
       ? null
-      : parsePositiveIntParam(pageSizeRaw, 25, 1, 100);
+      : parsePositiveIntParam(pageSizeRaw, 25, 1, 400);
 
   const qs = new URLSearchParams();
   qs.set("limit", String(limit));

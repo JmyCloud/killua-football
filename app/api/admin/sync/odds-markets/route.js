@@ -1,21 +1,13 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { fetchAllSportMonksPages } from "@/lib/sportmonks";
+import { isAuthorized, unauthorized } from "@/lib/admin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function isAuthorized(request) {
-  const expected = process.env.PROXY_SHARED_SECRET;
-  const provided = request.headers.get("x-admin-secret");
-  if (!expected) throw new Error("Missing PROXY_SHARED_SECRET");
-  return provided === expected;
-}
-
 export async function POST(request) {
-  if (!isAuthorized(request)) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-  }
+  if (!isAuthorized(request)) return unauthorized();
 
   const syncResult = await query(
     `insert into cache.sync_runs (target_table, scope_key, status)

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { isAuthorized, unauthorized, adminJson } from "@/lib/admin";
 import { normalizeRefreshMode } from "@/lib/cache";
+import { logger } from "@/lib/logger";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -56,9 +57,10 @@ export async function POST(request, context) {
   try {
     const id = Number(fixtureId);
 
+    const liveHint = liveRefreshMode === "force_fresh" ? "&live=true" : "";
     const fixtureSync = await adminJson(
       request,
-      `/sync/fixtures/${id}?refresh_mode=${refreshMode}`,
+      `/sync/fixtures/${id}?refresh_mode=${refreshMode}${liveHint}`,
       { method: "POST" }
     );
 
@@ -95,10 +97,11 @@ export async function POST(request, context) {
     const refereeId = discovered.referee_id ?? null;
     const shouldSyncInplay = Boolean(manifest1.body?.match_is_live_like);
 
-    const stepQueue = [];
+    // ── parallel batch 1: h2h + team stats + referee stats ──
+    const parallelSteps = [];
 
     if (homeTeamId && awayTeamId) {
-      stepQueue.push({
+      parallelSteps.push({
         step: "sync_h2h",
         path:
           `/sync/h2h/${homeTeamId}/${awayTeamId}` +
@@ -107,27 +110,30 @@ export async function POST(request, context) {
     }
 
     if (homeTeamId) {
-      stepQueue.push({
+      parallelSteps.push({
         step: "sync_home_team_stats",
         path: `/sync/statistics/seasons/teams/${homeTeamId}?refresh_mode=${refreshMode}`,
       });
     }
 
     if (awayTeamId) {
-      stepQueue.push({
+      parallelSteps.push({
         step: "sync_away_team_stats",
         path: `/sync/statistics/seasons/teams/${awayTeamId}?refresh_mode=${refreshMode}`,
       });
     }
 
     if (refereeId) {
-      stepQueue.push({
+      parallelSteps.push({
         step: "sync_referee_stats",
         path: `/sync/statistics/seasons/referees/${refereeId}?refresh_mode=${refreshMode}`,
       });
     }
 
-    stepQueue.push({
+    // ── parallel batch 2: odds (after batch 1) ──
+    const oddsSteps = [];
+
+    oddsSteps.push({
       step: "sync_odds_prematch",
       path:
         `/sync/odds/pre-match/fixtures/${id}/bookmakers/35` +
@@ -135,7 +141,7 @@ export async function POST(request, context) {
     });
 
     if (shouldSyncInplay) {
-      stepQueue.push({
+      oddsSteps.push({
         step: "sync_odds_inplay",
         path:
           `/sync/odds/inplay/fixtures/${id}/bookmakers/35` +
@@ -143,21 +149,25 @@ export async function POST(request, context) {
       });
     }
 
-    const sync_results = [];
-
-    for (const item of stepQueue) {
+    async function runStep(item) {
       try {
         const response = await adminJson(request, item.path, { method: "POST" });
-        sync_results.push(toStepResult(item.step, response));
+        return toStepResult(item.step, response);
       } catch (error) {
-        sync_results.push({
+        logger.exception("Sync step failed", error, { step: item.step, fixture_id: id });
+        return {
           step: item.step,
           ok: false,
           status: 500,
           error: error?.message ?? "Unknown sync error",
-        });
+        };
       }
     }
+
+    const sync_results = [
+      ...(await Promise.all(parallelSteps.map(runStep))),
+      ...(await Promise.all(oddsSteps.map(runStep))),
+    ];
 
     const failed_steps = sync_results
       .filter((item) => !item.ok)
@@ -194,6 +204,7 @@ export async function POST(request, context) {
           },
     });
   } catch (error) {
+    logger.exception("Analysis sync failed", error, { fixture_id: Number(fixtureId) });
     return NextResponse.json(
       { ok: false, error: error.message ?? "Unknown error" },
       { status: 500 }

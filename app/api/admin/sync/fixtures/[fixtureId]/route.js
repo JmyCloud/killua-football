@@ -2,19 +2,13 @@ import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { fetchSportMonksPage } from "@/lib/sportmonks";
 import { staleWhileRevalidate, parseRefreshMode } from "@/lib/cache";
+import { isAuthorized, unauthorized } from "@/lib/admin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const FIXTURE_INCLUDE =
   "league;season;stage;round;group;aggregate;venue;state;weatherReport;participants;metadata;formations;lineups.player;lineups.detailedPosition;lineups.details.type;scores.type;events.type;statistics.type;periods.type;periods.statistics.type;referees.referee;referees.type;coaches;sidelined.sideline.player;sidelined.sideline.type";
-
-function isAuthorized(request) {
-  const expected = process.env.PROXY_SHARED_SECRET;
-  const provided = request.headers.get("x-admin-secret");
-  if (!expected) throw new Error("Missing PROXY_SHARED_SECRET");
-  return provided === expected;
-}
 
 async function getCached(fixtureId, dbQuery = query) {
   const result = await dbQuery(
@@ -89,9 +83,7 @@ async function refresh(fixtureId, dbQuery = query) {
 }
 
 export async function POST(request, context) {
-  if (!isAuthorized(request)) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-  }
+  if (!isAuthorized(request)) return unauthorized();
 
   const { fixtureId } = await context.params;
   if (!/^\d+$/.test(String(fixtureId))) {
@@ -100,16 +92,18 @@ export async function POST(request, context) {
 
   const { searchParams } = new URL(request.url);
   const refreshMode = parseRefreshMode(searchParams, "swr");
+  const isLive = searchParams.get("live") === "true";
 
   try {
     const id = Number(fixtureId);
 
     const result = await staleWhileRevalidate({
-      type: "fixtures",
+      type: isLive ? "fixtures_live" : "fixtures",
       getCached: (dbQuery) => getCached(id, dbQuery),
       refresh: (dbQuery) => refresh(id, dbQuery),
       mode: refreshMode,
       lockKey: `sync:fixtures:${id}`,
+      waitForFreshMs: isLive ? 8000 : 15000,
     });
 
     return NextResponse.json({

@@ -1,0 +1,501 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Killua Football GPT Gateway",
+    "description": "Private GPT gateway for football match analysis. Provides fixture browsing, league discovery, data preparation, pack-based analysis reading, market search, and filtered detailed odds. All endpoints require x-gpt-secret header.",
+    "version": "3.1.0"
+  },
+  "servers": [
+    {
+      "url": "https://killua-football.vercel.app/api/gpt",
+      "description": "Production"
+    }
+  ],
+  "paths": {
+    "/fixtures": {
+      "get": {
+        "operationId": "listFixtures",
+        "summary": "Browse upcoming, live, or recent fixtures from the watchlist. Use this to find a match when the user does not know the fixture_id.",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string", "enum": ["upcoming", "live", "recent"], "default": "upcoming" },
+            "description": "Filter by match timing: upcoming (not started), live (in progress), recent (finished)"
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string" },
+            "description": "Search by team name or league name, e.g. 'Liverpool' or 'Premier League'"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "default": 20, "minimum": 1, "maximum": 50 },
+            "description": "Maximum number of fixtures to return"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of matching fixtures with basic info",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": { "type": "boolean" },
+                    "request_id": { "type": "string" },
+                    "status_filter": { "type": "string" },
+                    "search": { "type": "string" },
+                    "total": { "type": "integer" },
+                    "fixtures": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "fixture_id": { "type": "integer" },
+                          "home_team": { "type": "string" },
+                          "away_team": { "type": "string" },
+                          "league": { "type": "string" },
+                          "season": { "type": "string" },
+                          "starts_at": { "type": "string", "format": "date-time" },
+                          "match_state": { "type": "string" },
+                          "is_live": { "type": "boolean" },
+                          "data_ready": { "type": "boolean" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "Unauthorized" },
+          "500": { "description": "Server error" }
+        }
+      }
+    },
+    "/leagues": {
+      "get": {
+        "operationId": "listLeagues",
+        "summary": "Browse leagues that have upcoming fixtures in the watchlist. Use this to help the user discover available leagues.",
+        "parameters": [
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string" },
+            "description": "Search by league name, e.g. 'Premier League' or 'La Liga'"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of leagues with fixture counts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": { "type": "boolean" },
+                    "request_id": { "type": "string" },
+                    "total": { "type": "integer" },
+                    "leagues": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "league_id": { "type": "integer" },
+                          "league_name": { "type": "string" },
+                          "season_name": { "type": "string" },
+                          "fixture_count": { "type": "integer" },
+                          "next_kickoff": { "type": "string", "format": "date-time" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "Unauthorized" },
+          "500": { "description": "Server error" }
+        }
+      }
+    },
+    "/fixtures/{fixtureId}/prepare": {
+      "post": {
+        "operationId": "prepareFixtureAnalysis",
+        "summary": "Sync and prepare all analysis data for a fixture. Always call this before reading manifest or packs.",
+        "parameters": [
+          {
+            "name": "fixtureId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "integer" },
+            "description": "The fixture ID to prepare"
+          },
+          {
+            "name": "h2h_limit",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "default": 5, "minimum": 1, "maximum": 20 },
+            "description": "Number of H2H matches to fetch"
+          },
+          {
+            "name": "refresh_mode",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string", "enum": ["swr", "fresh_if_stale", "force_fresh"], "default": "fresh_if_stale" },
+            "description": "Cache refresh strategy for non-live data"
+          },
+          {
+            "name": "live_refresh_mode",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string", "enum": ["swr", "fresh_if_stale", "force_fresh"], "default": "fresh_if_stale" },
+            "description": "Cache refresh strategy for live-sensitive data"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Preparation result with sync status for each step",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": { "type": "boolean" },
+                    "fixture_id": { "type": "integer" },
+                    "match_is_live_like": { "type": "boolean" },
+                    "sync_results": { "type": "array", "items": { "type": "object" } },
+                    "failed_steps": { "type": "array", "items": { "type": "string" } },
+                    "request_id": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Invalid fixture ID" },
+          "401": { "description": "Unauthorized" },
+          "500": { "description": "Server error" }
+        }
+      }
+    },
+    "/fixtures/{fixtureId}/manifest": {
+      "get": {
+        "operationId": "getFixtureAnalysisManifest",
+        "summary": "Get the analysis manifest showing which packs are ready, default read order, and safe-read guidance.",
+        "parameters": [
+          {
+            "name": "fixtureId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "integer" },
+            "description": "The fixture ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Manifest with pack readiness, read order, and analysis blueprint",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": { "type": "boolean" },
+                    "fixture_id": { "type": "integer" },
+                    "default_mode": { "type": "string" },
+                    "match_is_live_like": { "type": "boolean" },
+                    "default_read_order": { "type": "array", "items": { "type": "string" } },
+                    "packs": { "type": "array", "items": { "type": "object" } },
+                    "analysis_blueprint": { "type": "object" },
+                    "coverage": { "type": "object" },
+                    "notes": { "type": "array", "items": { "type": "string" } },
+                    "request_id": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Invalid fixture ID" },
+          "401": { "description": "Unauthorized" },
+          "500": { "description": "Server error" }
+        }
+      }
+    },
+    "/fixtures/{fixtureId}/packs/{pack}": {
+      "get": {
+        "operationId": "getFixtureAnalysisPack",
+        "summary": "Read one analysis data pack for a fixture. Use read_mode=safe with pagination for large packs.",
+        "parameters": [
+          {
+            "name": "fixtureId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "integer" },
+            "description": "The fixture ID"
+          },
+          {
+            "name": "pack",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "fixture_context", "fixture_squads", "fixture_events_scores",
+                "fixture_statistics", "fixture_periods",
+                "h2h_context", "h2h_events", "h2h_statistics", "h2h_referees",
+                "home_team_all", "away_team_all", "referee_all",
+                "odds_prematch_summary", "odds_inplay_summary"
+              ]
+            },
+            "description": "The pack name to read"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "default": 5, "minimum": 1, "maximum": 20 },
+            "description": "Limit for certain data types like H2H matches"
+          },
+          {
+            "name": "read_mode",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string", "enum": ["full", "safe"], "default": "full" },
+            "description": "Use 'safe' for large packs to enable pagination and avoid oversized responses"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "default": 1, "minimum": 1 },
+            "description": "Page number when using safe read mode"
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "minimum": 1, "maximum": 400 },
+            "description": "Items per page when using safe read mode"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pack data with analysis focus hints and optional pagination info",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": { "type": "boolean" },
+                    "fixture_id": { "type": "integer" },
+                    "pack": { "type": "string" },
+                    "family": { "type": "string" },
+                    "label": { "type": "string" },
+                    "read_mode": { "type": "string" },
+                    "paging": { "type": "object" },
+                    "data": { "type": "object" },
+                    "request_id": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Invalid input" },
+          "401": { "description": "Unauthorized" },
+          "404": { "description": "Pack data not found" },
+          "500": { "description": "Server error" }
+        }
+      }
+    },
+    "/markets": {
+      "get": {
+        "operationId": "searchMarkets",
+        "summary": "Search available betting market definitions by keyword. Use this to discover or confirm market IDs before reading detailed odds.",
+        "parameters": [
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string" },
+            "description": "Keyword to search markets, e.g. 'fulltime', 'double chance', 'over under', 'btts', 'asian handicap'"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching market definitions with IDs and names",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": { "type": "boolean" },
+                    "count": { "type": "integer" },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "market_id": { "type": "integer" },
+                          "name": { "type": "string" },
+                          "developer_name": { "type": "string" },
+                          "has_winning_calculations": { "type": "boolean" }
+                        }
+                      }
+                    },
+                    "request_id": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "Unauthorized" },
+          "500": { "description": "Server error" }
+        }
+      }
+    },
+    "/fixtures/{fixtureId}/odds/pre-match": {
+      "get": {
+        "operationId": "getFixturePrematchOdds",
+        "summary": "Read detailed pre-match odds for selected markets. Always use filter parameter to select specific market IDs.",
+        "parameters": [
+          {
+            "name": "fixtureId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "integer" },
+            "description": "The fixture ID"
+          },
+          {
+            "name": "market_ids",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string" },
+            "description": "Comma-separated market IDs, e.g. '1,2,5'"
+          },
+          {
+            "name": "filter",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string" },
+            "description": "Filter syntax, e.g. 'market:1,2,5' to select specific markets"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Detailed pre-match odds with actual prices per market and outcome",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": { "type": "boolean" },
+                    "fixture_id": { "type": "integer" },
+                    "mode": { "type": "string" },
+                    "markets_found": { "type": "integer" },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "market_id": { "type": "integer" },
+                          "market_name": { "type": "string" },
+                          "odds": { "type": "array", "items": { "type": "object" } }
+                        }
+                      }
+                    },
+                    "request_id": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Invalid input" },
+          "401": { "description": "Unauthorized" },
+          "404": { "description": "No odds data found" },
+          "500": { "description": "Server error" }
+        }
+      }
+    },
+    "/fixtures/{fixtureId}/odds/inplay": {
+      "get": {
+        "operationId": "getFixtureInplayOdds",
+        "summary": "Read detailed in-play odds for selected markets. Only available during live matches. Always use filter parameter.",
+        "parameters": [
+          {
+            "name": "fixtureId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "integer" },
+            "description": "The fixture ID"
+          },
+          {
+            "name": "market_ids",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string" },
+            "description": "Comma-separated market IDs, e.g. '1,2,5'"
+          },
+          {
+            "name": "filter",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string" },
+            "description": "Filter syntax, e.g. 'market:1,2,5' to select specific markets"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Detailed in-play odds with actual prices per market and outcome",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": { "type": "boolean" },
+                    "fixture_id": { "type": "integer" },
+                    "mode": { "type": "string" },
+                    "markets_found": { "type": "integer" },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "market_id": { "type": "integer" },
+                          "market_name": { "type": "string" },
+                          "odds": { "type": "array", "items": { "type": "object" } }
+                        }
+                      }
+                    },
+                    "request_id": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Invalid input" },
+          "401": { "description": "Unauthorized" },
+          "404": { "description": "No odds data found" },
+          "500": { "description": "Server error" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "gptSecret": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-gpt-secret"
+      }
+    }
+  },
+  "security": [
+    { "gptSecret": [] }
+  ]
+}

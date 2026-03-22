@@ -2,18 +2,12 @@ import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { fetchAllSportMonksPages } from "@/lib/sportmonks";
 import { staleWhileRevalidate, parseRefreshMode } from "@/lib/cache";
+import { isAuthorized, unauthorized } from "@/lib/admin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const INCLUDE = "season;referee";
-
-function isAuthorized(request) {
-  const expected = process.env.PROXY_SHARED_SECRET;
-  const provided = request.headers.get("x-admin-secret");
-  if (!expected) throw new Error("Missing PROXY_SHARED_SECRET");
-  return provided === expected;
-}
 
 async function getCached(refereeId, dbQuery = query) {
   const result = await dbQuery(
@@ -64,13 +58,13 @@ async function refresh(refereeId, dbQuery = query) {
     }
 
     await dbQuery(
-      `update cache.sync_runs set status = 'done', finished_at = now() where id = $1`,
-      [syncId]
+      `select cache.rebuild_referee_stats_index($1)`,
+      [refereeId]
     );
 
     await dbQuery(
-      `select cache.rebuild_referee_stats_index($1)`,
-      [refereeId]
+      `update cache.sync_runs set status = 'done', finished_at = now() where id = $1`,
+      [syncId]
     );
   } catch (err) {
     await dbQuery(
@@ -82,9 +76,7 @@ async function refresh(refereeId, dbQuery = query) {
 }
 
 export async function POST(request, context) {
-  if (!isAuthorized(request)) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-  }
+  if (!isAuthorized(request)) return unauthorized();
 
   const { refereeId } = await context.params;
   if (!/^\d+$/.test(String(refereeId))) {

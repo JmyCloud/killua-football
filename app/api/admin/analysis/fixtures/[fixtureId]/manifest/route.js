@@ -13,6 +13,7 @@ import {
   summarizeChunkCoverage,
   buildAnalysisBlueprint,
   buildCoverageSummary,
+  hasContentfulChunk,
 } from "@/lib/analysis";
 
 export const runtime = "nodejs";
@@ -31,10 +32,6 @@ function withSafeReadMeta(name, payload) {
       recommended_read_mode: safe.enabled ? "safe" : "full",
     },
   };
-}
-
-function hasAny(dataMap, ...chunkNames) {
-  return chunkNames.some((name) => Boolean(dataMap?.[name]));
 }
 
 export async function GET(request, context) {
@@ -139,7 +136,10 @@ export async function GET(request, context) {
         family: "fixture",
         label: getPackDetails("fixture_events_scores")?.label ?? null,
         analysis_focus: getPackDetails("fixture_events_scores")?.analysis_focus ?? [],
-        ready: fixtureEventsScoresCoverage.found_count > 0,
+        ready:
+          fixtureEventsScoresCoverage.found_count > 0 &&
+          (hasContentfulChunk(fixtureChunks, "events") ||
+           hasContentfulChunk(fixtureChunks, "scores")),
         coverage: fixtureEventsScoresCoverage,
       }),
       withSafeReadMeta("fixture_statistics", {
@@ -147,7 +147,9 @@ export async function GET(request, context) {
         family: "fixture",
         label: getPackDetails("fixture_statistics")?.label ?? null,
         analysis_focus: getPackDetails("fixture_statistics")?.analysis_focus ?? [],
-        ready: fixtureStatisticsCoverage.found_count > 0,
+        ready:
+          fixtureStatisticsCoverage.found_count > 0 &&
+          hasContentfulChunk(fixtureChunks, "statistics"),
         coverage: fixtureStatisticsCoverage,
       }),
       withSafeReadMeta("fixture_periods", {
@@ -155,7 +157,9 @@ export async function GET(request, context) {
         family: "fixture",
         label: getPackDetails("fixture_periods")?.label ?? null,
         analysis_focus: getPackDetails("fixture_periods")?.analysis_focus ?? [],
-        ready: fixturePeriodsCoverage.found_count > 0,
+        ready:
+          fixturePeriodsCoverage.found_count > 0 &&
+          hasContentfulChunk(fixtureChunks, "periods"),
         coverage: fixturePeriodsCoverage,
       }),
       withSafeReadMeta("h2h_context", {

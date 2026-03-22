@@ -1,20 +1,14 @@
 import { NextResponse } from "next/server";
 import { adminJson } from "@/lib/admin";
 import { tryWithAdvisoryLock } from "@/lib/locks";
+import { isCronAuthorized, cronUnauthorized } from "@/lib/cron";
+import { logger } from "@/lib/logger";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function isCronAuthorized(request) {
-  const expected = process.env.CRON_SECRET;
-  const provided = request.headers.get("authorization");
-  return Boolean(expected) && provided === `Bearer ${expected}`;
-}
-
 export async function GET(request) {
-  if (!isCronAuthorized(request)) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-  }
+  if (!isCronAuthorized(request)) return cronUnauthorized();
 
   const lockKey = "cron:maintenance";
 
@@ -25,12 +19,34 @@ export async function GET(request) {
       { method: "POST" }
     );
 
+    let oddsMarkets = { ok: false, skipped: true };
+    try {
+      const res = await adminJson(
+        request,
+        `/sync/odds-markets`,
+        { method: "POST" }
+      );
+      oddsMarkets = { ok: res.ok, status: res.status, body: res.body ?? null };
+    } catch (err) {
+      logger.exception("Cron maintenance: odds-markets sync failed", err);
+      oddsMarkets = { ok: false, error: err?.message ?? "Unknown" };
+    }
+
+    const allOk = cleanup.ok && oddsMarkets.ok;
+    if (!allOk) {
+      logger.warn("Cron maintenance: partial failure", {
+        cleanup_ok: cleanup.ok,
+        odds_markets_ok: oddsMarkets.ok,
+      });
+    }
+
     return NextResponse.json(
       {
-        ok: cleanup.ok,
+        ok: allOk,
         cleanup: cleanup.body ?? null,
+        odds_markets_sync: oddsMarkets,
       },
-      { status: cleanup.ok ? 200 : cleanup.status || 500 }
+      { status: allOk ? 200 : cleanup.status || 500 }
     );
   });
 

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { adminJson } from "@/lib/admin";
 import { tryWithAdvisoryLock } from "@/lib/locks";
+import { isCronAuthorized, cronUnauthorized } from "@/lib/cron";
+import { logger } from "@/lib/logger";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,12 +13,6 @@ const DEFAULT_LOOKBACK_HOURS = 6;
 const DEFAULT_CONCURRENCY = 2;
 const DEFAULT_H2H_LIMIT = 5;
 
-function isCronAuthorized(request) {
-  const expected = process.env.CRON_SECRET;
-  const provided = request.headers.get("authorization");
-  return Boolean(expected) && provided === `Bearer ${expected}`;
-}
-
 function intParam(searchParams, key, fallback, max) {
   const raw = parseInt(searchParams.get(key) ?? "", 10);
   if (!Number.isInteger(raw) || raw < 1) return fallback;
@@ -24,9 +20,7 @@ function intParam(searchParams, key, fallback, max) {
 }
 
 export async function GET(request) {
-  if (!isCronAuthorized(request)) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-  }
+  if (!isCronAuthorized(request)) return cronUnauthorized();
 
   const lockKey = "cron:watchlist";
 
@@ -46,6 +40,10 @@ export async function GET(request) {
     );
 
     if (!discovery.ok) {
+      logger.error("Cron watchlist: discovery failed", {
+        status: discovery.status,
+        error: discovery.body?.error ?? "Discovery failed",
+      });
       return NextResponse.json(
         {
           ok: false,

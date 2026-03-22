@@ -376,6 +376,7 @@ export async function GET(request, context) {
         },
       });
     }
+    
 
     if (pack === "odds_prematch_summary") {
       const rows = await getOddsSummary(id, "prematch");
@@ -389,6 +390,10 @@ export async function GET(request, context) {
         usage_hint: "Use /markets?search=keyword then /index/odds/pre-match/{fixture_id}?market_id={id} for a specific market.",
         data: rows.map((r) => ({
           market_id: r.market_id,
+          market_name: r.market_name,
+          developer_name: r.developer_name,
+          legacy_id: r.legacy_id,
+          has_winning_calculations: r.has_winning_calculations,
           market_description: r.market_description,
           odds_count: r.odds_count,
           fetched_at: r.fetched_at,
@@ -408,6 +413,10 @@ export async function GET(request, context) {
         usage_hint: "Use /markets?search=keyword then /index/odds/inplay/{fixture_id}?market_id={id} for a specific market.",
         data: rows.map((r) => ({
           market_id: r.market_id,
+          market_name: r.market_name,
+          developer_name: r.developer_name,
+          legacy_id: r.legacy_id,
+          has_winning_calculations: r.has_winning_calculations,
           market_description: r.market_description,
           odds_count: r.odds_count,
           fetched_at: r.fetched_at,
