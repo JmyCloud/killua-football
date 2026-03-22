@@ -7,6 +7,11 @@ import {
   getCurrentTeamStats,
   getCurrentRefereeStats,
   getOddsSummary,
+  getFixtureXg,
+  getFixturePredictions,
+  getFixtureNews,
+  getFixtureExpectedLineups,
+  getSeasonStandings,
   isFixtureLiveLike,
   getPackSafeReadConfig,
   getPackDetails,
@@ -85,7 +90,15 @@ export async function GET(request, context) {
       ? await getCurrentRefereeStats(actors.referee_id)
       : null;
 
-    const prematchOdds = await getOddsSummary(id, "prematch");
+    const [prematchOdds, xgData, predictionsData, newsData, expectedLineupsData, standingsData] =
+      await Promise.all([
+        getOddsSummary(id, "prematch"),
+        getFixtureXg(id),
+        getFixturePredictions(id),
+        getFixtureNews(id),
+        getFixtureExpectedLineups(id),
+        actors.season_id ? getSeasonStandings(actors.season_id) : null,
+      ]);
     const liveLike = isFixtureLiveLike(actors.state);
     const inplayOdds = liveLike ? await getOddsSummary(id, "inplay") : [];
 
@@ -162,6 +175,37 @@ export async function GET(request, context) {
           hasContentfulChunk(fixtureChunks, "periods"),
         coverage: fixturePeriodsCoverage,
       }),
+      withSafeReadMeta("fixture_xg", {
+        name: "fixture_xg",
+        family: "fixture",
+        label: getPackDetails("fixture_xg")?.label ?? null,
+        analysis_focus: getPackDetails("fixture_xg")?.analysis_focus ?? [],
+        ready: Boolean(xgData?.payload?.data?.length),
+      }),
+      withSafeReadMeta("fixture_predictions", {
+        name: "fixture_predictions",
+        family: "fixture",
+        label: getPackDetails("fixture_predictions")?.label ?? null,
+        analysis_focus: getPackDetails("fixture_predictions")?.analysis_focus ?? [],
+        ready: Boolean(
+          predictionsData?.payload?.probabilities?.length ||
+          predictionsData?.payload?.value_bets?.length
+        ),
+      }),
+      withSafeReadMeta("fixture_news", {
+        name: "fixture_news",
+        family: "fixture",
+        label: getPackDetails("fixture_news")?.label ?? null,
+        analysis_focus: getPackDetails("fixture_news")?.analysis_focus ?? [],
+        ready: Boolean(newsData?.payload?.data?.length),
+      }),
+      withSafeReadMeta("fixture_expected_lineups", {
+        name: "fixture_expected_lineups",
+        family: "fixture",
+        label: getPackDetails("fixture_expected_lineups")?.label ?? null,
+        analysis_focus: getPackDetails("fixture_expected_lineups")?.analysis_focus ?? [],
+        ready: Boolean(expectedLineupsData?.payload?.data?.length),
+      }),
       withSafeReadMeta("h2h_context", {
         name: "h2h_context",
         family: "h2h",
@@ -226,6 +270,13 @@ export async function GET(request, context) {
         ready: liveLike && inplayOdds.length > 0,
         conditional: true,
       }),
+      withSafeReadMeta("league_standings", {
+        name: "league_standings",
+        family: "standings",
+        label: getPackDetails("league_standings")?.label ?? null,
+        analysis_focus: getPackDetails("league_standings")?.analysis_focus ?? [],
+        ready: Boolean(standingsData),
+      }),
     ];
 
     const blueprint = buildAnalysisBlueprint(liveLike);
@@ -239,6 +290,8 @@ export async function GET(request, context) {
         home_team_id: actors.home_team_id,
         away_team_id: actors.away_team_id,
         referee_id: actors.referee_id,
+        season_id: actors.season_id,
+        league_id: actors.league_id,
       },
       state: actors.state ?? null,
       match_is_live_like: liveLike,

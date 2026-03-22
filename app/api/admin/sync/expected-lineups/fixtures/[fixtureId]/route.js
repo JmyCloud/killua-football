@@ -1,0 +1,119 @@
+import { NextResponse } from "next/server";
+import { query } from "@/lib/db";
+import { fetchAllSportMonksPages } from "@/lib/sportmonks";
+import { staleWhileRevalidate, parseRefreshMode } from "@/lib/cache";
+import { isAuthorized, unauthorized } from "@/lib/admin";
+import { resolveFixtureActors } from "@/lib/analysis";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+async function getCached(fixtureId, dbQuery = query) {
+  const result = await dbQuery(
+    `select payload as data, fetched_at
+     from cache.fixture_expected_lineups_raw
+     where fixture_id = $1
+     order by fetched_at desc
+     limit 1`,
+    [fixtureId]
+  );
+  return result.rows[0] ?? null;
+}
+
+async function refresh(fixtureId, dbQuery = query) {
+  const syncResult = await dbQuery(
+    `insert into cache.sync_runs (target_table, scope_key, status)
+     values ($1, $2, 'running') returning id`,
+    ["fixture_expected_lineups_raw", `fixture:${fixtureId}`]
+  );
+  const syncId = syncResult.rows[0]?.id;
+  if (!syncId) throw new Error("Failed to create sync run");
+
+  try {
+    const actors = await resolveFixtureActors(fixtureId);
+    const teamIds = [actors.home_team_id, actors.away_team_id].filter(Boolean);
+
+    const allLineups = [];
+
+    for (const teamId of teamIds) {
+      try {
+        const pages = await fetchAllSportMonksPages(
+          `expected-lineups/teams/${teamId}`,
+          { per_page: 50, page: 1, include: "player;detailedPosition;team" }
+        );
+
+        const items = pages.flatMap((p) => p.payload?.data ?? []);
+        const forFixture = items.filter(
+          (item) => Number(item.fixture_id) === Number(fixtureId)
+        );
+
+        allLineups.push(...forFixture);
+      } catch {
+        // Team might not have expected lineups available
+      }
+    }
+
+    await dbQuery(
+      `insert into cache.fixture_expected_lineups_raw
+         (fixture_id, payload, fetched_at, sync_run_id)
+       values ($1, $2::jsonb, now(), $3)
+       on conflict (fixture_id) do update set
+         payload     = excluded.payload,
+         fetched_at  = excluded.fetched_at,
+         sync_run_id = excluded.sync_run_id,
+         updated_at  = now()`,
+      [fixtureId, JSON.stringify({ data: allLineups }), syncId]
+    );
+
+    await dbQuery(
+      `update cache.sync_runs set status = 'done', finished_at = now() where id = $1`,
+      [syncId]
+    );
+  } catch (err) {
+    await dbQuery(
+      `update cache.sync_runs set status = 'failed', notes = $1, finished_at = now() where id = $2`,
+      [err.message?.slice(0, 4000), syncId]
+    );
+    throw err;
+  }
+}
+
+export async function POST(request, context) {
+  if (!isAuthorized(request)) return unauthorized();
+
+  const { fixtureId } = await context.params;
+  if (!/^\d+$/.test(String(fixtureId))) {
+    return NextResponse.json({ ok: false, error: "Invalid fixtureId" }, { status: 400 });
+  }
+
+  const { searchParams } = new URL(request.url);
+  const refreshMode = parseRefreshMode(searchParams, "swr");
+
+  try {
+    const id = Number(fixtureId);
+
+    const result = await staleWhileRevalidate({
+      type: "fixture_expected_lineups",
+      getCached: (dbQuery) => getCached(id, dbQuery),
+      refresh: (dbQuery) => refresh(id, dbQuery),
+      mode: refreshMode,
+      lockKey: `sync:expected_lineups:${id}`,
+    });
+
+    return NextResponse.json({
+      ok: true,
+      fixture_id: id,
+      source: result.source,
+      stale: result.stale,
+      synced: true,
+      refresh_mode: result.mode,
+      freshness: result.freshness,
+      refresh: result.refresh,
+    });
+  } catch (error) {
+    return NextResponse.json(
+      { ok: false, error: error.message ?? "Unknown error" },
+      { status: 500 }
+    );
+  }
+}

@@ -95,6 +95,7 @@ export async function POST(request, context) {
     const homeTeamId = discovered.home_team_id ?? null;
     const awayTeamId = discovered.away_team_id ?? null;
     const refereeId = discovered.referee_id ?? null;
+    const seasonId = discovered.season_id ?? null;
     const shouldSyncInplay = Boolean(manifest1.body?.match_is_live_like);
 
     // ── parallel batch 1: h2h + team stats + referee stats ──
@@ -130,7 +131,37 @@ export async function POST(request, context) {
       });
     }
 
-    // ── parallel batch 2: odds (after batch 1) ──
+    if (seasonId) {
+      parallelSteps.push({
+        step: "sync_standings",
+        path: `/sync/standings/seasons/${seasonId}?refresh_mode=${refreshMode}`,
+      });
+    }
+
+    // ── parallel batch 2: premium data (xG, predictions, news, expected lineups) ──
+    const premiumSteps = [];
+
+    premiumSteps.push({
+      step: "sync_xg",
+      path: `/sync/expected/fixtures/${id}?refresh_mode=${refreshMode}`,
+    });
+
+    premiumSteps.push({
+      step: "sync_predictions",
+      path: `/sync/predictions/fixtures/${id}?refresh_mode=${refreshMode}`,
+    });
+
+    premiumSteps.push({
+      step: "sync_news",
+      path: `/sync/news/fixtures/${id}?refresh_mode=${refreshMode}`,
+    });
+
+    premiumSteps.push({
+      step: "sync_expected_lineups",
+      path: `/sync/expected-lineups/fixtures/${id}?refresh_mode=${refreshMode}`,
+    });
+
+    // ── parallel batch 3: odds ──
     const oddsSteps = [];
 
     oddsSteps.push({
@@ -166,6 +197,7 @@ export async function POST(request, context) {
 
     const sync_results = [
       ...(await Promise.all(parallelSteps.map(runStep))),
+      ...(await Promise.all(premiumSteps.map(runStep))),
       ...(await Promise.all(oddsSteps.map(runStep))),
     ];
 
@@ -185,6 +217,7 @@ export async function POST(request, context) {
         home_team_id: homeTeamId,
         away_team_id: awayTeamId,
         referee_id: refereeId,
+        season_id: seasonId,
       },
       match_is_live_like: shouldSyncInplay,
       refresh_policy: {

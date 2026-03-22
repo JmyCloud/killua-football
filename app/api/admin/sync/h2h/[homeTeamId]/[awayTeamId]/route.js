@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const INCLUDE =
-  "league;season;stage;round;group;aggregate;venue;state;participants;scores.type;events.type;statistics.type;referees.referee;referees.type";
+  "league;season;stage;round;group;aggregate;venue;state;participants;scores.type;events.type;statistics.type;periods.type;referees.referee;referees.type;formations;coaches";
 
 const DEFAULT_LIMIT = 5;
 const MAX_LIMIT = 50;

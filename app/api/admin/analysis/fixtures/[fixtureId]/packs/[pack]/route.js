@@ -8,6 +8,11 @@ import {
   getCurrentTeamStats,
   getCurrentRefereeStats,
   getOddsSummary,
+  getFixtureXg,
+  getFixturePredictions,
+  getFixtureNews,
+  getFixtureExpectedLineups,
+  getSeasonStandings,
   resolveFixtureActors,
   parsePackReadParams,
   applySafeFixturePackRead,
@@ -103,6 +108,50 @@ export async function GET(request, context) {
         coverage: summarizeChunkCoverage(chunks, data),
         paging: safeResult.paging,
         data: safeResult.data,
+      });
+    }
+
+    if (pack === "fixture_xg") {
+      const row = await getFixtureXg(id);
+      return NextResponse.json({
+        ok: true,
+        fixture_id: id,
+        ...meta,
+        data: row?.payload ?? { data: [] },
+        fetched_at: row?.fetched_at ?? null,
+      });
+    }
+
+    if (pack === "fixture_predictions") {
+      const row = await getFixturePredictions(id);
+      return NextResponse.json({
+        ok: true,
+        fixture_id: id,
+        ...meta,
+        data: row?.payload ?? { probabilities: [], value_bets: [] },
+        fetched_at: row?.fetched_at ?? null,
+      });
+    }
+
+    if (pack === "fixture_news") {
+      const row = await getFixtureNews(id);
+      return NextResponse.json({
+        ok: true,
+        fixture_id: id,
+        ...meta,
+        data: row?.payload ?? { data: [] },
+        fetched_at: row?.fetched_at ?? null,
+      });
+    }
+
+    if (pack === "fixture_expected_lineups") {
+      const row = await getFixtureExpectedLineups(id);
+      return NextResponse.json({
+        ok: true,
+        fixture_id: id,
+        ...meta,
+        data: row?.payload ?? { data: [] },
+        fetched_at: row?.fetched_at ?? null,
       });
     }
 
@@ -377,6 +426,29 @@ export async function GET(request, context) {
       });
     }
     
+
+    if (pack === "league_standings") {
+      if (!actors.season_id) {
+        return NextResponse.json({
+          ok: false,
+          ...meta,
+          error: "Season ID not found in fixture base data.",
+        }, { status: 404 });
+      }
+
+      const row = await getSeasonStandings(actors.season_id);
+      return NextResponse.json({
+        ok: true,
+        fixture_id: id,
+        ...meta,
+        season_id: actors.season_id,
+        league_id: actors.league_id,
+        home_team_id: actors.home_team_id,
+        away_team_id: actors.away_team_id,
+        data: row?.payload ?? { data: [] },
+        fetched_at: row?.fetched_at ?? null,
+      });
+    }
 
     if (pack === "odds_prematch_summary") {
       const rows = await getOddsSummary(id, "prematch");
