@@ -30,19 +30,31 @@ async function refresh(fixtureId, dbQuery = query) {
   if (!syncId) throw new Error("Failed to create sync run");
 
   try {
-    let items = [];
+    let teamXG = [];
+    let playerXG = [];
+
+    // Team-level xG: expected/fixtures (include: type;fixture;participant)
     try {
       const pages = await fetchAllSportMonksPages(
-        `expected/fixtures/${fixtureId}`,
-        {
-          per_page: 50,
-          page: 1,
-          include: "type;fixture;participant",
-        }
+        `expected/fixtures`,
+        { per_page: 50, page: 1, include: "type;fixture;participant" }
       );
-      items = pages.flatMap((p) => p.payload?.data ?? []);
+      const all = pages.flatMap((p) => p.payload?.data ?? []);
+      teamXG = all.filter((item) => Number(item.fixture_id) === Number(fixtureId));
     } catch {
-      // xG data may not be available for this fixture or plan
+      // Team xG data may not be available
+    }
+
+    // Player-level xG: expected/lineups (include: type;fixture;player;team)
+    try {
+      const pages = await fetchAllSportMonksPages(
+        `expected/lineups`,
+        { per_page: 50, page: 1, include: "type;fixture;player;team" }
+      );
+      const all = pages.flatMap((p) => p.payload?.data ?? []);
+      playerXG = all.filter((item) => Number(item.fixture_id) === Number(fixtureId));
+    } catch {
+      // Player xG data may not be available
     }
 
     await dbQuery(
@@ -54,7 +66,7 @@ async function refresh(fixtureId, dbQuery = query) {
          fetched_at  = excluded.fetched_at,
          sync_run_id = excluded.sync_run_id,
          updated_at  = now()`,
-      [fixtureId, JSON.stringify({ data: items }), syncId]
+      [fixtureId, JSON.stringify({ team_xg: teamXG, player_xg: playerXG }), syncId]
     );
 
     await dbQuery(
