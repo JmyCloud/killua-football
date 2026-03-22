@@ -99,90 +99,78 @@ export async function POST(request, context) {
     const seasonId = discovered.season_id ?? null;
     const shouldSyncInplay = Boolean(manifest1.body?.match_is_live_like);
 
-    // ── parallel batch 1: h2h + team stats + referee stats ──
-    const parallelSteps = [];
+    // ── single parallel batch: ALL syncs run concurrently ──
+    const allSteps = [];
 
     if (homeTeamId && awayTeamId) {
-      parallelSteps.push({
+      allSteps.push({
         step: "sync_h2h",
-        path:
-          `/sync/h2h/${homeTeamId}/${awayTeamId}` +
-          `?limit=${h2hLimit}&refresh_mode=${refreshMode}`,
+        path: `/sync/h2h/${homeTeamId}/${awayTeamId}?limit=${h2hLimit}&refresh_mode=${refreshMode}`,
       });
     }
 
     if (homeTeamId) {
-      parallelSteps.push({
+      allSteps.push({
         step: "sync_home_team_stats",
         path: `/sync/statistics/seasons/teams/${homeTeamId}?refresh_mode=${refreshMode}`,
       });
     }
 
     if (awayTeamId) {
-      parallelSteps.push({
+      allSteps.push({
         step: "sync_away_team_stats",
         path: `/sync/statistics/seasons/teams/${awayTeamId}?refresh_mode=${refreshMode}`,
       });
     }
 
     if (refereeId) {
-      parallelSteps.push({
+      allSteps.push({
         step: "sync_referee_stats",
         path: `/sync/statistics/seasons/referees/${refereeId}?refresh_mode=${refreshMode}`,
       });
     }
 
     if (seasonId) {
-      parallelSteps.push({
+      allSteps.push({
         step: "sync_standings",
         path: `/sync/standings/seasons/${seasonId}?refresh_mode=${refreshMode}`,
       });
     }
 
-    // ── parallel batch 2: premium data (xG, predictions, news, expected lineups) ──
-    const premiumSteps = [];
-
-    premiumSteps.push({
+    allSteps.push({
       step: "sync_xg",
       path: `/sync/expected/fixtures/${id}?refresh_mode=${refreshMode}`,
     });
 
-    premiumSteps.push({
+    allSteps.push({
       step: "sync_predictions",
       path: `/sync/predictions/fixtures/${id}?refresh_mode=${refreshMode}`,
     });
 
-    premiumSteps.push({
+    allSteps.push({
       step: "sync_news",
-      path: `/sync/news/fixtures/${id}?refresh_mode=${refreshMode}`,
+      path: `/sync/news/fixtures/${id}?refresh_mode=${refreshMode}${seasonId ? `&season_id=${seasonId}` : ""}`,
     });
 
-    premiumSteps.push({
+    allSteps.push({
       step: "sync_expected_lineups",
       path: `/sync/expected-lineups/fixtures/${id}?refresh_mode=${refreshMode}`,
     });
 
-    premiumSteps.push({
+    allSteps.push({
       step: "sync_transfer_rumours",
       path: `/sync/transfer-rumours/fixtures/${id}?refresh_mode=${refreshMode}`,
     });
 
-    // ── parallel batch 3: odds ──
-    const oddsSteps = [];
-
-    oddsSteps.push({
+    allSteps.push({
       step: "sync_odds_prematch",
-      path:
-        `/sync/odds/pre-match/fixtures/${id}/bookmakers/35` +
-        `?refresh_mode=${refreshMode}`,
+      path: `/sync/odds/pre-match/fixtures/${id}/bookmakers/35?refresh_mode=${refreshMode}`,
     });
 
     if (shouldSyncInplay) {
-      oddsSteps.push({
+      allSteps.push({
         step: "sync_odds_inplay",
-        path:
-          `/sync/odds/inplay/fixtures/${id}/bookmakers/35` +
-          `?refresh_mode=${liveRefreshMode}`,
+        path: `/sync/odds/inplay/fixtures/${id}/bookmakers/35?refresh_mode=${liveRefreshMode}`,
       });
     }
 
@@ -201,11 +189,7 @@ export async function POST(request, context) {
       }
     }
 
-    const sync_results = [
-      ...(await Promise.all(parallelSteps.map(runStep))),
-      ...(await Promise.all(premiumSteps.map(runStep))),
-      ...(await Promise.all(oddsSteps.map(runStep))),
-    ];
+    const sync_results = await Promise.all(allSteps.map(runStep));
 
     const failed_steps = sync_results
       .filter((item) => !item.ok)

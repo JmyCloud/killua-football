@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
-import { fetchAllSportMonksPages } from "@/lib/sportmonks";
+import { fetchSportMonksPage } from "@/lib/sportmonks";
 import { staleWhileRevalidate, parseRefreshMode } from "@/lib/cache";
 import { isAuthorized, unauthorized } from "@/lib/admin";
 
@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 const BOOKMAKER_ID = 35;
-const INCLUDE = "market";
+const INCLUDE = "market;bookmaker";
 
 async function getCached(fixtureId, dbQuery = query) {
   const result = await dbQuery(
@@ -33,32 +33,35 @@ async function refresh(fixtureId, dbQuery = query) {
   if (!syncId) throw new Error("Failed to create sync run");
 
   try {
-    const pages = await fetchAllSportMonksPages(
-      `odds/inplay/fixtures/${fixtureId}/bookmakers/${BOOKMAKER_ID}`,
-      { include: INCLUDE, per_page: 50, page: 1 }
-    );
-
-    for (const page of pages) {
-      await dbQuery(
-        `insert into cache.odds_inplay_fixtures_bookmakers_35_raw
-           (fixture_id, bookmaker_id, page_number, payload, pagination, fetched_at, sync_run_id)
-         values ($1, $2, $3, $4::jsonb, $5::jsonb, now(), $6)
-         on conflict (fixture_id, bookmaker_id, page_number) do update set
-           payload     = excluded.payload,
-           pagination  = excluded.pagination,
-           fetched_at  = excluded.fetched_at,
-           sync_run_id = excluded.sync_run_id,
-           updated_at  = now()`,
-        [
-          fixtureId,
-          BOOKMAKER_ID,
-          page.page_number,
-          JSON.stringify(page.payload),
-          JSON.stringify(page.pagination),
-          syncId,
-        ]
+    let payload = { data: [] };
+    try {
+      payload = await fetchSportMonksPage(
+        `odds/inplay/fixtures/${fixtureId}/bookmakers/${BOOKMAKER_ID}`,
+        { include: INCLUDE }
       );
+    } catch {
+      // Inplay odds may not be available for this fixture or bookmaker
     }
+
+    await dbQuery(
+      `insert into cache.odds_inplay_fixtures_bookmakers_35_raw
+         (fixture_id, bookmaker_id, page_number, payload, pagination, fetched_at, sync_run_id)
+       values ($1, $2, $3, $4::jsonb, $5::jsonb, now(), $6)
+       on conflict (fixture_id, bookmaker_id, page_number) do update set
+         payload     = excluded.payload,
+         pagination  = excluded.pagination,
+         fetched_at  = excluded.fetched_at,
+         sync_run_id = excluded.sync_run_id,
+         updated_at  = now()`,
+      [
+        fixtureId,
+        BOOKMAKER_ID,
+        1,
+        JSON.stringify(payload),
+        JSON.stringify(null),
+        syncId,
+      ]
+    );
 
     await dbQuery(
       `select cache.rebuild_odds_inplay_index($1)`,

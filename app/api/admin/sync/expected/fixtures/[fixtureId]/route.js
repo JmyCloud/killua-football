@@ -37,7 +37,7 @@ async function refresh(fixtureId, dbQuery = query) {
         {
           per_page: 50,
           page: 1,
-          include: "type;participant",
+          include: "type;fixture;participant",
         }
       );
       items = pages.flatMap((p) => p.payload?.data ?? []);

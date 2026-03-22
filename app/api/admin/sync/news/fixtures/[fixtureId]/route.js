@@ -20,7 +20,7 @@ async function getCached(fixtureId, dbQuery = query) {
   return result.rows[0] ?? null;
 }
 
-async function refresh(fixtureId, dbQuery = query) {
+async function refresh(fixtureId, seasonId, dbQuery = query) {
   const syncResult = await dbQuery(
     `insert into cache.sync_runs (target_table, scope_key, status)
      values ($1, $2, 'running') returning id`,
@@ -32,9 +32,13 @@ async function refresh(fixtureId, dbQuery = query) {
   try {
     let fixtureNews = [];
     try {
+      const endpoint = seasonId
+        ? `news/pre-match/seasons/${seasonId}`
+        : `news/pre-match/upcoming`;
+
       const pages = await fetchAllSportMonksPages(
-        `news/pre-match/upcoming`,
-        { per_page: 50, page: 1 }
+        endpoint,
+        { per_page: 50, page: 1, include: "fixture;league;lines" }
       );
       const allNews = pages.flatMap((p) => p.payload?.data ?? []);
       fixtureNews = allNews.filter(
@@ -79,6 +83,7 @@ export async function POST(request, context) {
 
   const { searchParams } = new URL(request.url);
   const refreshMode = parseRefreshMode(searchParams, "swr");
+  const seasonId = searchParams.get("season_id") || null;
 
   try {
     const id = Number(fixtureId);
@@ -86,7 +91,7 @@ export async function POST(request, context) {
     const result = await staleWhileRevalidate({
       type: "fixture_news",
       getCached: (dbQuery) => getCached(id, dbQuery),
-      refresh: (dbQuery) => refresh(id, dbQuery),
+      refresh: (dbQuery) => refresh(id, seasonId, dbQuery),
       mode: refreshMode,
       lockKey: `sync:news:${id}`,
     });

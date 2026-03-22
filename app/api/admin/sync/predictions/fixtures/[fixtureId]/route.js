@@ -36,11 +36,11 @@ async function refresh(fixtureId, dbQuery = query) {
       const [probPages, vbPages] = await Promise.all([
         fetchAllSportMonksPages(
           `predictions/probabilities/fixtures/${fixtureId}`,
-          { per_page: 50, page: 1 }
+          { per_page: 50, page: 1, include: "type;fixture" }
         ).catch(() => []),
         fetchAllSportMonksPages(
           `predictions/value-bets/fixtures/${fixtureId}`,
-          { per_page: 50, page: 1 }
+          { per_page: 50, page: 1, include: "type;fixture" }
         ).catch(() => []),
       ]);
       probabilities = probPages.flatMap((p) => p.payload?.data ?? []);
