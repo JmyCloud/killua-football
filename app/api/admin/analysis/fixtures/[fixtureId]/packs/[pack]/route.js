@@ -21,6 +21,7 @@ import {
   getPackSafeReadConfig,
   getPackDetails,
   summarizeChunkCoverage,
+  paginatePayloadArray,
 } from "@/lib/analysis";
 
 export const runtime = "nodejs";
@@ -148,22 +149,77 @@ export async function GET(request, context) {
 
     if (pack === "fixture_expected_lineups") {
       const row = await getFixtureExpectedLineups(id);
+      const items = row?.payload?.data ?? [];
+
+      if (readParams.read_mode === "safe" && readParams.page_size) {
+        const paginated = paginatePayloadArray(items, readParams.page, readParams.page_size);
+        return NextResponse.json({
+          ok: true,
+          fixture_id: id,
+          ...meta,
+          ...buildSafeReadMeta(pack, readParams),
+          paging: paginated.paging,
+          data: paginated.items,
+          fetched_at: row?.fetched_at ?? null,
+        });
+      }
+
       return NextResponse.json({
         ok: true,
         fixture_id: id,
         ...meta,
-        data: row?.payload ?? { data: [] },
+        ...buildSafeReadMeta(pack, readParams),
+        paging: null,
+        data: items,
         fetched_at: row?.fetched_at ?? null,
       });
     }
 
     if (pack === "fixture_transfer_rumours") {
       const row = await getFixtureTransferRumours(id);
+      const rawItems = row?.payload?.data ?? [];
+      const sorted = [...rawItems].sort((a, b) =>
+        String(b.updated_at ?? b.created_at ?? "").localeCompare(
+          String(a.updated_at ?? a.created_at ?? "")
+        )
+      );
+      const slim = sorted.map((r) => ({
+        id: r.id ?? null,
+        player_name: r.player?.data?.display_name ?? r.player?.data?.name ?? r.player_name ?? null,
+        player_id: r.player_id ?? r.player?.data?.id ?? null,
+        from_team: r.fromTeam?.data?.name ?? r.from_team_name ?? null,
+        to_team: r.toTeam?.data?.name ?? r.to_team_name ?? null,
+        position: r.position?.data?.name ?? r.position_name ?? null,
+        type: r.type?.data?.name ?? r.type_name ?? null,
+        season_id: r.season_id ?? null,
+        status: r.status ?? null,
+        is_completed: r.is_completed ?? null,
+        fee: r.fee ?? null,
+        updated_at: r.updated_at ?? r.created_at ?? null,
+      }));
+
+      if (readParams.read_mode === "safe" && readParams.page_size) {
+        const paginated = paginatePayloadArray(slim, readParams.page, readParams.page_size);
+        return NextResponse.json({
+          ok: true,
+          fixture_id: id,
+          ...meta,
+          ...buildSafeReadMeta(pack, readParams),
+          total_rumours: slim.length,
+          paging: paginated.paging,
+          data: paginated.items,
+          fetched_at: row?.fetched_at ?? null,
+        });
+      }
+
       return NextResponse.json({
         ok: true,
         fixture_id: id,
         ...meta,
-        data: row?.payload ?? { data: [] },
+        ...buildSafeReadMeta(pack, readParams),
+        total_rumours: slim.length,
+        paging: null,
+        data: slim,
         fetched_at: row?.fetched_at ?? null,
       });
     }
@@ -450,15 +506,71 @@ export async function GET(request, context) {
       }
 
       const row = await getSeasonStandings(actors.season_id);
+      const rawData = row?.payload?.data ?? row?.payload ?? [];
+      const groups = Array.isArray(rawData) ? rawData : [rawData];
+
+      const slimRow = (s) => ({
+        position: s.position ?? s.rank ?? null,
+        team_id: s.team_id ?? s.participant_id ?? s.participant?.data?.id ?? null,
+        team_name: s.team_name ?? s.participant?.data?.name ?? s.participant?.data?.short_code ?? null,
+        points: s.points ?? s.overall?.points ?? null,
+        played: s.overall?.games_played ?? s.games_played ?? null,
+        won: s.overall?.won ?? s.won ?? null,
+        draw: s.overall?.draw ?? s.draw ?? null,
+        lost: s.overall?.lost ?? s.lost ?? null,
+        goals_for: s.overall?.goals_scored ?? s.goals_scored ?? null,
+        goals_against: s.overall?.goals_against ?? s.goals_against ?? null,
+        goal_diff: s.overall?.goal_difference ?? s.goal_difference ?? s.goal_diff ?? null,
+        form: s.form ?? s.recent_form ?? null,
+        result: s.result ?? null,
+      });
+
+      const allRows = [];
+      const groupsMeta = [];
+      for (const group of groups) {
+        const standings = group?.standings?.data ?? group?.standings ?? group?.data ?? [];
+        const rows = Array.isArray(standings) ? standings : [standings];
+        const gMeta = {
+          id: group?.id ?? null,
+          name: group?.name ?? group?.league?.data?.name ?? null,
+          type: group?.type ?? null,
+        };
+        groupsMeta.push({ ...gMeta, count: rows.length });
+        for (const s of rows) {
+          allRows.push({ ...slimRow(s), group_name: gMeta.name });
+        }
+      }
+
+      if (readParams.read_mode === "safe" && readParams.page_size) {
+        const paginated = paginatePayloadArray(allRows, readParams.page, readParams.page_size);
+        return NextResponse.json({
+          ok: true,
+          fixture_id: id,
+          ...meta,
+          ...buildSafeReadMeta(pack, readParams),
+          season_id: actors.season_id,
+          league_id: actors.league_id,
+          home_team_id: actors.home_team_id,
+          away_team_id: actors.away_team_id,
+          groups: groupsMeta,
+          paging: paginated.paging,
+          data: paginated.items,
+          fetched_at: row?.fetched_at ?? null,
+        });
+      }
+
       return NextResponse.json({
         ok: true,
         fixture_id: id,
         ...meta,
+        ...buildSafeReadMeta(pack, readParams),
         season_id: actors.season_id,
         league_id: actors.league_id,
         home_team_id: actors.home_team_id,
         away_team_id: actors.away_team_id,
-        data: row?.payload ?? { data: [] },
+        groups: groupsMeta,
+        paging: null,
+        data: allRows,
         fetched_at: row?.fetched_at ?? null,
       });
     }

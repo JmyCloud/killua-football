@@ -33,7 +33,6 @@ async function refresh(fixtureId, dbQuery = query) {
   try {
     const actors = await resolveFixtureActors(fixtureId);
     const teamIds = [actors.home_team_id, actors.away_team_id].filter(Boolean);
-
     const allLineups = [];
 
     for (const teamId of teamIds) {
@@ -42,12 +41,10 @@ async function refresh(fixtureId, dbQuery = query) {
           `expected-lineups/teams/${teamId}`,
           { per_page: 50, page: 1, include: "type;fixture;participant" }
         );
-
         const items = pages.flatMap((p) => p.payload?.data ?? []);
         const forFixture = items.filter(
           (item) => Number(item.fixture_id) === Number(fixtureId)
         );
-
         allLineups.push(...forFixture);
       } catch {
         // Team might not have expected lineups available
