@@ -15,6 +15,16 @@ import {
   syncTransferRumours,
   syncOddsPrematch,
   syncOddsInplay,
+  syncStandingsRound,
+  syncStandingsCorrections,
+  syncStandingsLive,
+  syncCommentaries,
+  syncMatchFacts,
+  syncSquads,
+  syncSchedules,
+  syncSquadByTeam,
+  syncTopscorers,
+  syncTeamRankings,
 } from "@/lib/sync-direct";
 
 export const runtime = "nodejs";
@@ -107,6 +117,8 @@ export async function POST(request, context) {
     const awayTeamId = discovered.away_team_id ?? null;
     const refereeId = discovered.referee_id ?? null;
     const seasonId = discovered.season_id ?? null;
+    const leagueId = discovered.league_id ?? null;
+    const roundId = discovered.round_id ?? null;
     const shouldSyncInplay = Boolean(manifest1.body?.match_is_live_like);
 
     // ── Step 3: ALL syncs in ONE parallel batch — direct calls, shared DB pool ──
@@ -134,9 +146,45 @@ export async function POST(request, context) {
     tasks.push({ step: "sync_expected_lineups", fn: () => syncExpectedLineups(id, refreshMode) });
     tasks.push({ step: "sync_transfer_rumours", fn: () => syncTransferRumours(id, refreshMode) });
     tasks.push({ step: "sync_odds_prematch", fn: () => syncOddsPrematch(id, refreshMode) });
+    // Always attempt inplay odds sync — API returns empty if match isn't live.
+    tasks.push({ step: "sync_odds_inplay", fn: () => syncOddsInplay(id, shouldSyncInplay ? liveRefreshMode : refreshMode) });
 
-    if (shouldSyncInplay) {
-      tasks.push({ step: "sync_odds_inplay", fn: () => syncOddsInplay(id, liveRefreshMode) });
+    // ── Standings extensions ──
+    if (roundId) {
+      tasks.push({ step: "sync_standings_round", fn: () => syncStandingsRound(roundId, refreshMode) });
+    }
+    if (seasonId) {
+      tasks.push({ step: "sync_standings_corrections", fn: () => syncStandingsCorrections(seasonId, refreshMode) });
+    }
+    if (leagueId && shouldSyncInplay) {
+      tasks.push({ step: "sync_standings_live", fn: () => syncStandingsLive(leagueId, shouldSyncInplay ? liveRefreshMode : refreshMode) });
+    }
+
+    // ── Supporting context endpoints ──
+    tasks.push({ step: "sync_commentaries", fn: () => syncCommentaries(id, shouldSyncInplay ? liveRefreshMode : refreshMode) });
+    tasks.push({ step: "sync_match_facts", fn: () => syncMatchFacts(id, refreshMode) });
+    if (seasonId && homeTeamId) {
+      tasks.push({ step: "sync_home_squads", fn: () => syncSquads(seasonId, homeTeamId, refreshMode) });
+      tasks.push({ step: "sync_home_schedules", fn: () => syncSchedules(seasonId, homeTeamId, refreshMode) });
+    }
+    if (seasonId && awayTeamId) {
+      tasks.push({ step: "sync_away_squads", fn: () => syncSquads(seasonId, awayTeamId, refreshMode) });
+      tasks.push({ step: "sync_away_schedules", fn: () => syncSchedules(seasonId, awayTeamId, refreshMode) });
+    }
+
+    // ── Squad fallback (by team only, no season needed) ──
+    if (homeTeamId) {
+      tasks.push({ step: "sync_home_squad_fallback", fn: () => syncSquadByTeam(homeTeamId, refreshMode) });
+      tasks.push({ step: "sync_home_rankings", fn: () => syncTeamRankings(homeTeamId, refreshMode) });
+    }
+    if (awayTeamId) {
+      tasks.push({ step: "sync_away_squad_fallback", fn: () => syncSquadByTeam(awayTeamId, refreshMode) });
+      tasks.push({ step: "sync_away_rankings", fn: () => syncTeamRankings(awayTeamId, refreshMode) });
+    }
+
+    // ── Season-level: topscorers ──
+    if (seasonId) {
+      tasks.push({ step: "sync_topscorers", fn: () => syncTopscorers(seasonId, refreshMode) });
     }
 
     // Concurrency limiter — max 4 syncs at a time.
@@ -158,6 +206,8 @@ export async function POST(request, context) {
         away_team_id: awayTeamId,
         referee_id: refereeId,
         season_id: seasonId,
+        league_id: leagueId,
+        round_id: roundId,
       },
       match_is_live_like: shouldSyncInplay,
       refresh_policy: {

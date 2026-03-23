@@ -38,12 +38,19 @@ async function refresh(fixtureId, seasonId, dbQuery = query) {
 
       const pages = await fetchAllSportMonksPages(
         endpoint,
-        { per_page: 50, page: 1, include: "fixture;league;lines" }
+        { per_page: 50, page: 1, include: "fixture;league;lines", order: "desc" }
       );
       const allNews = pages.flatMap((p) => p.payload?.data ?? []);
-      fixtureNews = allNews.filter(
+      const forFixture = allNews.filter(
         (item) => Number(item.fixture_id) === Number(fixtureId)
       );
+      // Dedupe by article id
+      const seen = new Set();
+      fixtureNews = forFixture.filter((item) => {
+        if (!item.id || seen.has(item.id)) return false;
+        seen.add(item.id);
+        return true;
+      });
     } catch {
       // News may not be available for this fixture or plan
     }

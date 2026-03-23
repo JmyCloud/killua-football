@@ -3,7 +3,7 @@
   "info": {
     "title": "Killua Football GPT Gateway",
     "description": "Private GPT gateway for football match analysis with premium SportMonks data. Provides fixture browsing, league discovery, data preparation (including xG, predictions, news, expected lineups, league standings), pack-based analysis reading, market search, and filtered detailed odds. All endpoints require x-gpt-secret header.",
-    "version": "3.3.0"
+    "version": "3.4.0"
   },
   "servers": [
     {
@@ -227,6 +227,73 @@
         }
       }
     },
+    "/fixtures/{fixtureId}/bundle": {
+      "get": {
+        "operationId": "getFixtureAnalysisBundle",
+        "summary": "Get ALL analysis data for a fixture in one response. Preferred over reading individual packs. Call prepare first, then use this.",
+        "parameters": [
+          {
+            "name": "fixtureId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "integer" },
+            "description": "The fixture ID"
+          },
+          {
+            "name": "h2h_limit",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "default": 5, "minimum": 1, "maximum": 20 },
+            "description": "Number of H2H matches to include"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Complete analysis bundle with all packs, H2H, standings, odds, team/referee stats in one object",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": { "type": "boolean" },
+                    "fixture_id": { "type": "integer" },
+                    "bundle_version": { "type": "integer" },
+                    "match_is_live_like": { "type": "boolean" },
+                    "discovered": { "type": "object" },
+                    "state": { "type": "object" },
+                    "fixture_context": { "type": "object" },
+                    "fixture_squads": { "type": "object" },
+                    "fixture_events_scores": { "type": "object" },
+                    "fixture_statistics": { "type": "object" },
+                    "fixture_periods": { "type": "object" },
+                    "fixture_xg": { "type": "object" },
+                    "fixture_predictions": { "type": "object" },
+                    "fixture_news": { "type": "object" },
+                    "fixture_expected_lineups": { "type": "object" },
+                    "fixture_transfer_rumours": { "type": "object" },
+                    "fixture_commentaries": { "type": "object" },
+                    "fixture_match_facts": { "type": "object" },
+                    "h2h": { "type": "object" },
+                    "home_team": { "type": "object" },
+                    "away_team": { "type": "object" },
+                    "referee": { "type": "object" },
+                    "standings": { "type": "object" },
+                    "topscorers": { "type": "object" },
+                    "odds": { "type": "object" },
+                    "coverage": { "type": "object" },
+                    "notes": { "type": "array", "items": { "type": "string" } },
+                    "request_id": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Invalid fixture ID" },
+          "401": { "description": "Unauthorized" },
+          "500": { "description": "Server error" }
+        }
+      }
+    },
     "/fixtures/{fixtureId}/packs/{pack}": {
       "get": {
         "operationId": "getFixtureAnalysisPack",
@@ -249,9 +316,15 @@
                 "fixture_context", "fixture_squads", "fixture_events_scores",
                 "fixture_statistics", "fixture_periods",
                 "fixture_xg", "fixture_predictions", "fixture_news", "fixture_expected_lineups", "fixture_transfer_rumours",
+                "fixture_commentaries", "fixture_match_facts",
                 "h2h_context", "h2h_events", "h2h_statistics", "h2h_referees",
                 "home_team_all", "away_team_all", "referee_all",
-                "league_standings",
+                "home_team_squad", "away_team_squad",
+                "home_team_schedule", "away_team_schedule",
+                "home_team_squad_fallback", "away_team_squad_fallback",
+                "season_topscorers",
+                "home_team_rankings", "away_team_rankings",
+                "league_standings", "standings_round", "standings_corrections", "standings_live",
                 "odds_prematch_summary", "odds_inplay_summary"
               ]
             },

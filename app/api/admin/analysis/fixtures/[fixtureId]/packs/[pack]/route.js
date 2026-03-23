@@ -14,6 +14,16 @@ import {
   getFixtureExpectedLineups,
   getFixtureTransferRumours,
   getSeasonStandings,
+  getRoundStandings,
+  getStandingsCorrections,
+  getLiveStandings,
+  getFixtureCommentaries,
+  getFixtureMatchFacts,
+  getTeamSquad,
+  getTeamSchedule,
+  getTeamSquadFallback,
+  getSeasonTopscorers,
+  getTeamRankings,
   resolveFixtureActors,
   parsePackReadParams,
   applySafeFixturePackRead,
@@ -494,7 +504,6 @@ export async function GET(request, context) {
         },
       });
     }
-    
 
     if (pack === "league_standings") {
       if (!actors.season_id) {
@@ -507,39 +516,41 @@ export async function GET(request, context) {
 
       const row = await getSeasonStandings(actors.season_id);
       const rawData = row?.payload?.data ?? row?.payload ?? [];
-      const groups = Array.isArray(rawData) ? rawData : [rawData];
+      const entries = Array.isArray(rawData) ? rawData : [rawData];
 
-      const slimRow = (s) => ({
-        position: s.position ?? s.rank ?? null,
-        team_id: s.team_id ?? s.participant_id ?? s.participant?.data?.id ?? null,
-        team_name: s.team_name ?? s.participant?.data?.name ?? s.participant?.data?.short_code ?? null,
-        points: s.points ?? s.overall?.points ?? null,
-        played: s.overall?.games_played ?? s.games_played ?? null,
-        won: s.overall?.won ?? s.won ?? null,
-        draw: s.overall?.draw ?? s.draw ?? null,
-        lost: s.overall?.lost ?? s.lost ?? null,
-        goals_for: s.overall?.goals_scored ?? s.goals_scored ?? null,
-        goals_against: s.overall?.goals_against ?? s.goals_against ?? null,
-        goal_diff: s.overall?.goal_difference ?? s.goal_difference ?? s.goal_diff ?? null,
-        form: s.form ?? s.recent_form ?? null,
+      // Helper: extract value from SportMonks v3 details[] array
+      const detail = (details, name) => {
+        if (!Array.isArray(details)) return null;
+        const lc = name.toLowerCase();
+        const d = details.find(
+          (x) =>
+            x?.type?.name?.toLowerCase() === lc ||
+            x?.type?.developer_name?.toLowerCase() === lc
+        );
+        return d?.value ?? null;
+      };
+
+      // SportMonks v3 returns a flat array of standing rows, each with
+      // participant, details[], form[], stage, group, round, etc.
+      const allRows = entries.map((s) => ({
+        position: s.position ?? null,
+        team_id: s.participant_id ?? s.participant?.id ?? null,
+        team_name: s.participant?.name ?? s.participant?.short_code ?? null,
+        points: s.points ?? null,
         result: s.result ?? null,
-      });
-
-      const allRows = [];
-      const groupsMeta = [];
-      for (const group of groups) {
-        const standings = group?.standings?.data ?? group?.standings ?? group?.data ?? [];
-        const rows = Array.isArray(standings) ? standings : [standings];
-        const gMeta = {
-          id: group?.id ?? null,
-          name: group?.name ?? group?.league?.data?.name ?? null,
-          type: group?.type ?? null,
-        };
-        groupsMeta.push({ ...gMeta, count: rows.length });
-        for (const s of rows) {
-          allRows.push({ ...slimRow(s), group_name: gMeta.name });
-        }
-      }
+        played: detail(s.details, "games_played") ?? detail(s.details, "matches_played") ?? null,
+        won: detail(s.details, "won") ?? detail(s.details, "wins") ?? null,
+        draw: detail(s.details, "draw") ?? detail(s.details, "draws") ?? null,
+        lost: detail(s.details, "lost") ?? detail(s.details, "losses") ?? null,
+        goals_for: detail(s.details, "goals_for") ?? detail(s.details, "goals_scored") ?? null,
+        goals_against: detail(s.details, "goals_against") ?? detail(s.details, "goals_conceded") ?? null,
+        goal_diff: detail(s.details, "goal_difference") ?? detail(s.details, "goal_diff") ?? null,
+        clean_sheets: detail(s.details, "clean_sheets") ?? null,
+        form: Array.isArray(s.form) ? s.form : null,
+        stage_name: s.stage?.name ?? null,
+        group_name: s.group?.name ?? null,
+        round_name: s.round?.name ?? null,
+      }));
 
       if (readParams.read_mode === "safe" && readParams.page_size) {
         const paginated = paginatePayloadArray(allRows, readParams.page, readParams.page_size);
@@ -552,7 +563,7 @@ export async function GET(request, context) {
           league_id: actors.league_id,
           home_team_id: actors.home_team_id,
           away_team_id: actors.away_team_id,
-          groups: groupsMeta,
+          total_entries: allRows.length,
           paging: paginated.paging,
           data: paginated.items,
           fetched_at: row?.fetched_at ?? null,
@@ -568,7 +579,7 @@ export async function GET(request, context) {
         league_id: actors.league_id,
         home_team_id: actors.home_team_id,
         away_team_id: actors.away_team_id,
-        groups: groupsMeta,
+        total_entries: allRows.length,
         paging: null,
         data: allRows,
         fetched_at: row?.fetched_at ?? null,
@@ -619,6 +630,211 @@ export async function GET(request, context) {
           fetched_at: r.fetched_at,
         })),
       });
+    }
+
+    // ── Standings by Round ──
+    if (pack === "standings_round") {
+      if (!actors.round_id) {
+        return NextResponse.json({ ok: false, ...meta, error: "Round ID not found in fixture base data." }, { status: 404 });
+      }
+      const row = await getRoundStandings(actors.round_id);
+      const rawData = row?.payload?.data ?? row?.payload ?? [];
+      const entries = Array.isArray(rawData) ? rawData : [rawData];
+      const detail = (details, name) => { if (!Array.isArray(details)) return null; const lc = name.toLowerCase(); const d = details.find((x) => x?.type?.name?.toLowerCase() === lc || x?.type?.developer_name?.toLowerCase() === lc); return d?.value ?? null; };
+      const allRows = entries.map((s) => ({ position: s.position ?? null, team_id: s.participant_id ?? s.participant?.id ?? null, team_name: s.participant?.name ?? null, points: s.points ?? null, result: s.result ?? null, played: detail(s.details, "games_played") ?? detail(s.details, "matches_played") ?? null, won: detail(s.details, "won") ?? null, draw: detail(s.details, "draw") ?? null, lost: detail(s.details, "lost") ?? null, goals_for: detail(s.details, "goals_for") ?? null, goals_against: detail(s.details, "goals_against") ?? null, goal_diff: detail(s.details, "goal_difference") ?? null, form: Array.isArray(s.form) ? s.form : null, stage_name: s.stage?.name ?? null, group_name: s.group?.name ?? null, round_name: s.round?.name ?? null }));
+      if (readParams.read_mode === "safe" && readParams.page_size) {
+        const paginated = paginatePayloadArray(allRows, readParams.page, readParams.page_size);
+        return NextResponse.json({ ok: true, fixture_id: id, ...meta, ...buildSafeReadMeta(pack, readParams), round_id: actors.round_id, total_entries: allRows.length, paging: paginated.paging, data: paginated.items, fetched_at: row?.fetched_at ?? null });
+      }
+      return NextResponse.json({ ok: true, fixture_id: id, ...meta, ...buildSafeReadMeta(pack, readParams), round_id: actors.round_id, total_entries: allRows.length, paging: null, data: allRows, fetched_at: row?.fetched_at ?? null });
+    }
+
+    // ── Standings Corrections ──
+    if (pack === "standings_corrections") {
+      if (!actors.season_id) {
+        return NextResponse.json({ ok: false, ...meta, error: "Season ID not found." }, { status: 404 });
+      }
+      const row = await getStandingsCorrections(actors.season_id);
+      const rawData = row?.payload?.data ?? row?.payload ?? [];
+      const entries = Array.isArray(rawData) ? rawData : [rawData];
+      return NextResponse.json({ ok: true, fixture_id: id, ...meta, season_id: actors.season_id, total_entries: entries.length, data: entries, fetched_at: row?.fetched_at ?? null });
+    }
+
+    // ── Live Standings ──
+    if (pack === "standings_live") {
+      if (!actors.league_id) {
+        return NextResponse.json({ ok: false, ...meta, error: "League ID not found." }, { status: 404 });
+      }
+      const row = await getLiveStandings(actors.league_id);
+      const rawData = row?.payload?.data ?? row?.payload ?? [];
+      const entries = Array.isArray(rawData) ? rawData : [rawData];
+      const detail = (details, name) => { if (!Array.isArray(details)) return null; const lc = name.toLowerCase(); const d = details.find((x) => x?.type?.name?.toLowerCase() === lc || x?.type?.developer_name?.toLowerCase() === lc); return d?.value ?? null; };
+      const allRows = entries.map((s) => ({ position: s.position ?? null, team_id: s.participant_id ?? s.participant?.id ?? null, team_name: s.participant?.name ?? null, points: s.points ?? null, result: s.result ?? null, played: detail(s.details, "games_played") ?? null, won: detail(s.details, "won") ?? null, draw: detail(s.details, "draw") ?? null, lost: detail(s.details, "lost") ?? null, goals_for: detail(s.details, "goals_for") ?? null, goals_against: detail(s.details, "goals_against") ?? null, goal_diff: detail(s.details, "goal_difference") ?? null, form: Array.isArray(s.form) ? s.form : null, stage_name: s.stage?.name ?? null, group_name: s.group?.name ?? null, round_name: s.round?.name ?? null }));
+      if (readParams.read_mode === "safe" && readParams.page_size) {
+        const paginated = paginatePayloadArray(allRows, readParams.page, readParams.page_size);
+        return NextResponse.json({ ok: true, fixture_id: id, ...meta, ...buildSafeReadMeta(pack, readParams), league_id: actors.league_id, total_entries: allRows.length, paging: paginated.paging, data: paginated.items, fetched_at: row?.fetched_at ?? null });
+      }
+      return NextResponse.json({ ok: true, fixture_id: id, ...meta, ...buildSafeReadMeta(pack, readParams), league_id: actors.league_id, total_entries: allRows.length, paging: null, data: allRows, fetched_at: row?.fetched_at ?? null });
+    }
+
+    // ── Commentaries ──
+    if (pack === "fixture_commentaries") {
+      const row = await getFixtureCommentaries(id);
+      const rawData = row?.payload?.data ?? [];
+      const entries = Array.isArray(rawData) ? rawData : [];
+      if (readParams.read_mode === "safe" && readParams.page_size) {
+        const paginated = paginatePayloadArray(entries, readParams.page, readParams.page_size);
+        return NextResponse.json({ ok: true, fixture_id: id, ...meta, ...buildSafeReadMeta(pack, readParams), total_entries: entries.length, paging: paginated.paging, data: paginated.items, fetched_at: row?.fetched_at ?? null });
+      }
+      return NextResponse.json({ ok: true, fixture_id: id, ...meta, total_entries: entries.length, data: entries, fetched_at: row?.fetched_at ?? null });
+    }
+
+    // ── Match Facts ──
+    if (pack === "fixture_match_facts") {
+      const row = await getFixtureMatchFacts(id);
+      const rawData = row?.payload?.data ?? [];
+      const entries = Array.isArray(rawData) ? rawData : [];
+      return NextResponse.json({ ok: true, fixture_id: id, ...meta, total_entries: entries.length, data: entries, fetched_at: row?.fetched_at ?? null });
+    }
+
+    // ── Home Team Squad ──
+    if (pack === "home_team_squad") {
+      if (!actors.season_id || !actors.home_team_id) {
+        return NextResponse.json({ ok: false, ...meta, error: "Season or home team ID not found." }, { status: 404 });
+      }
+      const row = await getTeamSquad(actors.season_id, actors.home_team_id);
+      const rawData = row?.payload?.data ?? [];
+      const entries = Array.isArray(rawData) ? rawData : [];
+      if (readParams.read_mode === "safe" && readParams.page_size) {
+        const paginated = paginatePayloadArray(entries, readParams.page, readParams.page_size);
+        return NextResponse.json({ ok: true, fixture_id: id, ...meta, ...buildSafeReadMeta(pack, readParams), season_id: actors.season_id, team_id: actors.home_team_id, total_entries: entries.length, paging: paginated.paging, data: paginated.items, fetched_at: row?.fetched_at ?? null });
+      }
+      return NextResponse.json({ ok: true, fixture_id: id, ...meta, season_id: actors.season_id, team_id: actors.home_team_id, total_entries: entries.length, data: entries, fetched_at: row?.fetched_at ?? null });
+    }
+
+    // ── Away Team Squad ──
+    if (pack === "away_team_squad") {
+      if (!actors.season_id || !actors.away_team_id) {
+        return NextResponse.json({ ok: false, ...meta, error: "Season or away team ID not found." }, { status: 404 });
+      }
+      const row = await getTeamSquad(actors.season_id, actors.away_team_id);
+      const rawData = row?.payload?.data ?? [];
+      const entries = Array.isArray(rawData) ? rawData : [];
+      if (readParams.read_mode === "safe" && readParams.page_size) {
+        const paginated = paginatePayloadArray(entries, readParams.page, readParams.page_size);
+        return NextResponse.json({ ok: true, fixture_id: id, ...meta, ...buildSafeReadMeta(pack, readParams), season_id: actors.season_id, team_id: actors.away_team_id, total_entries: entries.length, paging: paginated.paging, data: paginated.items, fetched_at: row?.fetched_at ?? null });
+      }
+      return NextResponse.json({ ok: true, fixture_id: id, ...meta, season_id: actors.season_id, team_id: actors.away_team_id, total_entries: entries.length, data: entries, fetched_at: row?.fetched_at ?? null });
+    }
+
+    // ── Home Team Schedule ──
+    if (pack === "home_team_schedule") {
+      if (!actors.season_id || !actors.home_team_id) {
+        return NextResponse.json({ ok: false, ...meta, error: "Season or home team ID not found." }, { status: 404 });
+      }
+      const row = await getTeamSchedule(actors.season_id, actors.home_team_id);
+      const rawData = row?.payload?.data ?? [];
+      const entries = Array.isArray(rawData) ? rawData : [];
+      if (readParams.read_mode === "safe" && readParams.page_size) {
+        const paginated = paginatePayloadArray(entries, readParams.page, readParams.page_size);
+        return NextResponse.json({ ok: true, fixture_id: id, ...meta, ...buildSafeReadMeta(pack, readParams), season_id: actors.season_id, team_id: actors.home_team_id, total_entries: entries.length, paging: paginated.paging, data: paginated.items, fetched_at: row?.fetched_at ?? null });
+      }
+      return NextResponse.json({ ok: true, fixture_id: id, ...meta, season_id: actors.season_id, team_id: actors.home_team_id, total_entries: entries.length, data: entries, fetched_at: row?.fetched_at ?? null });
+    }
+
+    // ── Away Team Schedule ──
+    if (pack === "away_team_schedule") {
+      if (!actors.season_id || !actors.away_team_id) {
+        return NextResponse.json({ ok: false, ...meta, error: "Season or away team ID not found." }, { status: 404 });
+      }
+      const row = await getTeamSchedule(actors.season_id, actors.away_team_id);
+      const rawData = row?.payload?.data ?? [];
+      const entries = Array.isArray(rawData) ? rawData : [];
+      if (readParams.read_mode === "safe" && readParams.page_size) {
+        const paginated = paginatePayloadArray(entries, readParams.page, readParams.page_size);
+        return NextResponse.json({ ok: true, fixture_id: id, ...meta, ...buildSafeReadMeta(pack, readParams), season_id: actors.season_id, team_id: actors.away_team_id, total_entries: entries.length, paging: paginated.paging, data: paginated.items, fetched_at: row?.fetched_at ?? null });
+      }
+      return NextResponse.json({ ok: true, fixture_id: id, ...meta, season_id: actors.season_id, team_id: actors.away_team_id, total_entries: entries.length, data: entries, fetched_at: row?.fetched_at ?? null });
+    }
+
+    // ── Home Team Squad Fallback (by team only) ──
+    if (pack === "home_team_squad_fallback") {
+      if (!actors.home_team_id) {
+        return NextResponse.json({ ok: false, ...meta, error: "Home team ID not found." }, { status: 404 });
+      }
+      const row = await getTeamSquadFallback(actors.home_team_id);
+      const rawData = row?.payload?.data ?? [];
+      const entries = Array.isArray(rawData) ? rawData : [rawData];
+      const slim = entries.map((p) => ({ id: p.id ?? null, player_id: p.player_id ?? null, player_name: p.player?.display_name ?? p.player?.name ?? null, team_id: p.team_id ?? null, position: p.position?.name ?? null, detailed_position: p.detailedPosition?.name ?? null, jersey_number: p.jersey_number ?? null, start: p.start ?? null, end: p.end ?? null, transfer_date: p.transfer?.date ?? null }));
+      if (readParams.read_mode === "safe" && readParams.page_size) {
+        const paginated = paginatePayloadArray(slim, readParams.page, readParams.page_size);
+        return NextResponse.json({ ok: true, fixture_id: id, ...meta, ...buildSafeReadMeta(pack, readParams), team_id: actors.home_team_id, total_entries: slim.length, paging: paginated.paging, data: paginated.items, fetched_at: row?.fetched_at ?? null });
+      }
+      return NextResponse.json({ ok: true, fixture_id: id, ...meta, team_id: actors.home_team_id, total_entries: slim.length, data: slim, fetched_at: row?.fetched_at ?? null });
+    }
+
+    // ── Away Team Squad Fallback (by team only) ──
+    if (pack === "away_team_squad_fallback") {
+      if (!actors.away_team_id) {
+        return NextResponse.json({ ok: false, ...meta, error: "Away team ID not found." }, { status: 404 });
+      }
+      const row = await getTeamSquadFallback(actors.away_team_id);
+      const rawData = row?.payload?.data ?? [];
+      const entries = Array.isArray(rawData) ? rawData : [rawData];
+      const slim = entries.map((p) => ({ id: p.id ?? null, player_id: p.player_id ?? null, player_name: p.player?.display_name ?? p.player?.name ?? null, team_id: p.team_id ?? null, position: p.position?.name ?? null, detailed_position: p.detailedPosition?.name ?? null, jersey_number: p.jersey_number ?? null, start: p.start ?? null, end: p.end ?? null, transfer_date: p.transfer?.date ?? null }));
+      if (readParams.read_mode === "safe" && readParams.page_size) {
+        const paginated = paginatePayloadArray(slim, readParams.page, readParams.page_size);
+        return NextResponse.json({ ok: true, fixture_id: id, ...meta, ...buildSafeReadMeta(pack, readParams), team_id: actors.away_team_id, total_entries: slim.length, paging: paginated.paging, data: paginated.items, fetched_at: row?.fetched_at ?? null });
+      }
+      return NextResponse.json({ ok: true, fixture_id: id, ...meta, team_id: actors.away_team_id, total_entries: slim.length, data: slim, fetched_at: row?.fetched_at ?? null });
+    }
+
+    // ── Season Topscorers ──
+    if (pack === "season_topscorers") {
+      if (!actors.season_id) {
+        return NextResponse.json({ ok: false, ...meta, error: "Season ID not found." }, { status: 404 });
+      }
+      const row = await getSeasonTopscorers(actors.season_id);
+      const rawData = row?.payload?.data ?? [];
+      const entries = Array.isArray(rawData) ? rawData : [];
+      const slim = entries.map((t) => ({ id: t.id ?? null, season_id: t.season_id ?? null, player_id: t.player_id ?? null, player_name: t.player?.display_name ?? t.player?.name ?? null, team_id: t.participant_id ?? null, team_name: t.participant?.name ?? null, type_name: t.type?.name ?? null, type_id: t.type_id ?? null, position: t.position ?? null, total: t.total ?? null, stage_name: t.stage?.name ?? null }));
+      if (readParams.read_mode === "safe" && readParams.page_size) {
+        const paginated = paginatePayloadArray(slim, readParams.page, readParams.page_size);
+        return NextResponse.json({ ok: true, fixture_id: id, ...meta, ...buildSafeReadMeta(pack, readParams), season_id: actors.season_id, total_entries: slim.length, paging: paginated.paging, data: paginated.items, fetched_at: row?.fetched_at ?? null });
+      }
+      return NextResponse.json({ ok: true, fixture_id: id, ...meta, season_id: actors.season_id, total_entries: slim.length, data: slim, fetched_at: row?.fetched_at ?? null });
+    }
+
+    // ── Home Team Rankings ──
+    if (pack === "home_team_rankings") {
+      if (!actors.home_team_id) {
+        return NextResponse.json({ ok: false, ...meta, error: "Home team ID not found." }, { status: 404 });
+      }
+      const row = await getTeamRankings(actors.home_team_id);
+      const rawData = row?.payload?.data ?? [];
+      const entries = Array.isArray(rawData) ? rawData : [];
+      const slim = entries.map((r) => ({ id: r.id ?? null, team_id: r.team_id ?? null, team_name: r.team?.name ?? null, date: r.date ?? null, current_rank: r.current_rank ?? null, scaled_score: r.scaled_score ?? null }));
+      if (readParams.read_mode === "safe" && readParams.page_size) {
+        const paginated = paginatePayloadArray(slim, readParams.page, readParams.page_size);
+        return NextResponse.json({ ok: true, fixture_id: id, ...meta, ...buildSafeReadMeta(pack, readParams), team_id: actors.home_team_id, total_entries: slim.length, paging: paginated.paging, data: paginated.items, fetched_at: row?.fetched_at ?? null });
+      }
+      return NextResponse.json({ ok: true, fixture_id: id, ...meta, team_id: actors.home_team_id, total_entries: slim.length, data: slim, fetched_at: row?.fetched_at ?? null });
+    }
+
+    // ── Away Team Rankings ──
+    if (pack === "away_team_rankings") {
+      if (!actors.away_team_id) {
+        return NextResponse.json({ ok: false, ...meta, error: "Away team ID not found." }, { status: 404 });
+      }
+      const row = await getTeamRankings(actors.away_team_id);
+      const rawData = row?.payload?.data ?? [];
+      const entries = Array.isArray(rawData) ? rawData : [];
+      const slim = entries.map((r) => ({ id: r.id ?? null, team_id: r.team_id ?? null, team_name: r.team?.name ?? null, date: r.date ?? null, current_rank: r.current_rank ?? null, scaled_score: r.scaled_score ?? null }));
+      if (readParams.read_mode === "safe" && readParams.page_size) {
+        const paginated = paginatePayloadArray(slim, readParams.page, readParams.page_size);
+        return NextResponse.json({ ok: true, fixture_id: id, ...meta, ...buildSafeReadMeta(pack, readParams), team_id: actors.away_team_id, total_entries: slim.length, paging: paginated.paging, data: paginated.items, fetched_at: row?.fetched_at ?? null });
+      }
+      return NextResponse.json({ ok: true, fixture_id: id, ...meta, team_id: actors.away_team_id, total_entries: slim.length, data: slim, fetched_at: row?.fetched_at ?? null });
     }
 
     return NextResponse.json(

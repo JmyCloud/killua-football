@@ -3,6 +3,7 @@ import { query } from "@/lib/db";
 import { isAuthorized, unauthorized, adminJson } from "@/lib/admin";
 import { parsePositiveInt } from "@/lib/watchlist";
 import { fetchAllSportMonksPages } from "@/lib/sportmonks";
+import { fetchFixturesLatest } from "@/lib/sync-direct";
 import { tryWithAdvisoryLock } from "@/lib/locks";
 
 export const runtime = "nodejs";
@@ -259,6 +260,16 @@ async function buildPreview(input) {
     sourceUsed = "inplay";
   }
 
+  // Supplement with fixtures/latest for recently-updated fixtures
+  let fixturesLatestCount = 0;
+  try {
+    const fixturesLatest = await fetchFixturesLatest();
+    fixturesLatestCount = fixturesLatest.length;
+    if (fixturesLatest.length > 0) {
+      fixtures = [...fixtures, ...fixturesLatest];
+    }
+  } catch { /* non-critical — skip if unavailable */ }
+
   const candidates = dedupeCandidates(
     fixtures
       .map((fixture) => buildCandidate(fixture, priorityLeagueIds, sourceUsed))
@@ -277,6 +288,7 @@ async function buildPreview(input) {
       selected_source: sourceUsed,
       fetched_fixtures: fixtures.length,
       latest_count: latest.length,
+      fixtures_latest_count: fixturesLatestCount,
     },
     candidates,
   };

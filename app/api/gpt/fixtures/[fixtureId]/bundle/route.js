@@ -19,14 +19,18 @@ export async function GET(request, context) {
   }
 
   try {
-    const result = await adminJson(request, `/analysis/fixtures/${fixtureId}/manifest`);
+    const result = await adminJson(
+      request,
+      `/analysis/fixtures/${fixtureId}/bundle`,
+      { timeout: 55000 }
+    );
 
     if (!result.ok) {
       return jsonError(
         requestId,
         result.status || 500,
-        result.body?.error || "Manifest failed",
-        "manifest_failed"
+        result.body?.error || "Bundle failed",
+        "bundle_failed"
       );
     }
 
@@ -47,8 +51,8 @@ export async function GET(request, context) {
     return jsonError(
       requestId,
       500,
-      "Manifest failed",
-      "manifest_failed",
+      "Bundle failed",
+      "bundle_failed",
       error?.message ?? null
     );
   }

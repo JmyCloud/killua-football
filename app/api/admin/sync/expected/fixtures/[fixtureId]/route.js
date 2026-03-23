@@ -4,6 +4,37 @@ import { fetchSportMonksPage } from "@/lib/sportmonks";
 import { staleWhileRevalidate, parseRefreshMode } from "@/lib/cache";
 import { isAuthorized, unauthorized } from "@/lib/admin";
 
+const XG_MAX_PAGES = 10;
+
+async function fetchXGCollection(endpoint, queryParams, fixtureId) {
+  let page = 1;
+  const allMatching = [];
+
+  while (page <= XG_MAX_PAGES) {
+    const resp = await fetchSportMonksPage(endpoint, {
+      ...queryParams,
+      per_page: 50,
+      page,
+    });
+    const items = resp?.data;
+    if (!Array.isArray(items) || items.length === 0) break;
+
+    const matching = items.filter(
+      (item) => Number(item.fixture_id) === Number(fixtureId)
+    );
+    allMatching.push(...matching);
+
+    if (allMatching.length > 0) break;
+
+    const pagination = resp?.pagination ?? resp?.meta?.pagination;
+    if (!pagination?.has_more) break;
+
+    page++;
+  }
+
+  return allMatching;
+}
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -33,26 +64,24 @@ async function refresh(fixtureId, dbQuery = query) {
     let teamXG = [];
     let playerXG = [];
 
-    // Team-level xG: single-fixture endpoint (no pagination needed)
+    // Team-level xG: collection endpoint with pagination + local filter
     try {
-      const resp = await fetchSportMonksPage(
-        `expected/fixtures/${fixtureId}`,
-        { include: "type;fixture;participant" }
+      teamXG = await fetchXGCollection(
+        "expected/fixtures",
+        { include: "type;fixture;participant" },
+        fixtureId
       );
-      const d = resp?.data;
-      teamXG = Array.isArray(d) ? d : d ? [d] : [];
     } catch {
-      // Team xG data may not be available (pre-match or plan limitation)
+      // xG data may not be available (pre-match or plan limitation)
     }
 
-    // Player-level xG: single-fixture endpoint (no pagination needed)
+    // Player-level xG: collection endpoint with pagination + local filter
     try {
-      const resp = await fetchSportMonksPage(
-        `expected/lineups/${fixtureId}`,
-        { include: "type;fixture;player;team" }
+      playerXG = await fetchXGCollection(
+        "expected/lineups",
+        { include: "type;fixture;player;team" },
+        fixtureId
       );
-      const d = resp?.data;
-      playerXG = Array.isArray(d) ? d : d ? [d] : [];
     } catch {
       // Player xG data may not be available
     }

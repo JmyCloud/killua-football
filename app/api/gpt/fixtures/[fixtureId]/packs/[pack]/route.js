@@ -70,7 +70,7 @@ export async function GET(request, context) {
         status: result.status || 200,
         headers: {
           "x-request-id": requestId,
-          "cache-control": "no-store",
+          "cache-control": "public, s-maxage=120, stale-while-revalidate=60",
         },
       }
     );

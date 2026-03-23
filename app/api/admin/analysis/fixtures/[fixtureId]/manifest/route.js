@@ -13,6 +13,16 @@ import {
   getFixtureExpectedLineups,
   getFixtureTransferRumours,
   getSeasonStandings,
+  getRoundStandings,
+  getStandingsCorrections,
+  getLiveStandings,
+  getFixtureCommentaries,
+  getFixtureMatchFacts,
+  getTeamSquad,
+  getTeamSchedule,
+  getTeamSquadFallback,
+  getSeasonTopscorers,
+  getTeamRankings,
   isFixtureLiveLike,
   getPackSafeReadConfig,
   getPackDetails,
@@ -92,18 +102,55 @@ export async function GET(request, context) {
       ? await getCurrentRefereeStats(actors.referee_id)
       : null;
 
-    const [prematchOdds, xgData, predictionsData, newsData, expectedLineupsData, transferRumoursData, standingsData] =
-      await Promise.all([
-        getOddsSummary(id, "prematch"),
-        getFixtureXg(id),
-        getFixturePredictions(id),
-        getFixtureNews(id),
-        getFixtureExpectedLineups(id),
-        getFixtureTransferRumours(id),
-        actors.season_id ? getSeasonStandings(actors.season_id) : null,
-      ]);
+    const [
+      prematchOdds,
+      xgData,
+      predictionsData,
+      newsData,
+      expectedLineupsData,
+      transferRumoursData,
+      standingsData,
+      roundStandingsData,
+      correctionsData,
+      commentariesData,
+      matchFactsData,
+    ] = await Promise.all([
+      getOddsSummary(id, "prematch"),
+      getFixtureXg(id),
+      getFixturePredictions(id),
+      getFixtureNews(id),
+      getFixtureExpectedLineups(id),
+      getFixtureTransferRumours(id),
+      actors.season_id ? getSeasonStandings(actors.season_id) : null,
+      actors.round_id ? getRoundStandings(actors.round_id) : null,
+      actors.season_id ? getStandingsCorrections(actors.season_id) : null,
+      getFixtureCommentaries(id),
+      getFixtureMatchFacts(id),
+    ]);
     const liveLike = isFixtureLiveLike(actors.state);
     const inplayOdds = liveLike ? await getOddsSummary(id, "inplay") : [];
+    const liveStandingsData = liveLike && actors.league_id ? await getLiveStandings(actors.league_id) : null;
+    const [
+      homeSquadData,
+      awaySquadData,
+      homeScheduleData,
+      awayScheduleData,
+      homeSquadFallbackData,
+      awaySquadFallbackData,
+      topscorersData,
+      homeRankingsData,
+      awayRankingsData,
+    ] = await Promise.all([
+      actors.season_id && actors.home_team_id ? getTeamSquad(actors.season_id, actors.home_team_id) : null,
+      actors.season_id && actors.away_team_id ? getTeamSquad(actors.season_id, actors.away_team_id) : null,
+      actors.season_id && actors.home_team_id ? getTeamSchedule(actors.season_id, actors.home_team_id) : null,
+      actors.season_id && actors.away_team_id ? getTeamSchedule(actors.season_id, actors.away_team_id) : null,
+      actors.home_team_id ? getTeamSquadFallback(actors.home_team_id) : null,
+      actors.away_team_id ? getTeamSquadFallback(actors.away_team_id) : null,
+      actors.season_id ? getSeasonTopscorers(actors.season_id) : null,
+      actors.home_team_id ? getTeamRankings(actors.home_team_id) : null,
+      actors.away_team_id ? getTeamRankings(actors.away_team_id) : null,
+    ]);
 
     const fixtureContextCoverage = summarizeChunkCoverage(
       getPackDetails("fixture_context").contains,
@@ -155,7 +202,7 @@ export async function GET(request, context) {
         ready:
           fixtureEventsScoresCoverage.found_count > 0 &&
           (hasContentfulChunk(fixtureChunks, "events") ||
-           hasContentfulChunk(fixtureChunks, "scores")),
+            hasContentfulChunk(fixtureChunks, "scores")),
         coverage: fixtureEventsScoresCoverage,
       }),
       withSafeReadMeta("fixture_statistics", {
@@ -192,7 +239,7 @@ export async function GET(request, context) {
         analysis_focus: getPackDetails("fixture_predictions")?.analysis_focus ?? [],
         ready: Boolean(
           predictionsData?.payload?.probabilities?.length ||
-          predictionsData?.payload?.value_bets?.length
+            predictionsData?.payload?.value_bets?.length
         ),
       }),
       withSafeReadMeta("fixture_news", {
@@ -287,6 +334,105 @@ export async function GET(request, context) {
         analysis_focus: getPackDetails("league_standings")?.analysis_focus ?? [],
         ready: Boolean(standingsData),
       }),
+      withSafeReadMeta("standings_round", {
+        name: "standings_round",
+        family: "standings",
+        label: getPackDetails("standings_round")?.label ?? null,
+        analysis_focus: getPackDetails("standings_round")?.analysis_focus ?? [],
+        ready: Boolean(roundStandingsData),
+      }),
+      withSafeReadMeta("standings_corrections", {
+        name: "standings_corrections",
+        family: "standings",
+        label: getPackDetails("standings_corrections")?.label ?? null,
+        analysis_focus: getPackDetails("standings_corrections")?.analysis_focus ?? [],
+        ready: Boolean(correctionsData?.payload?.data?.length),
+      }),
+      withSafeReadMeta("standings_live", {
+        name: "standings_live",
+        family: "standings",
+        label: getPackDetails("standings_live")?.label ?? null,
+        analysis_focus: getPackDetails("standings_live")?.analysis_focus ?? [],
+        ready: liveLike && Boolean(liveStandingsData),
+        conditional: true,
+      }),
+      withSafeReadMeta("fixture_commentaries", {
+        name: "fixture_commentaries",
+        family: "fixture",
+        label: getPackDetails("fixture_commentaries")?.label ?? null,
+        analysis_focus: getPackDetails("fixture_commentaries")?.analysis_focus ?? [],
+        ready: Boolean(commentariesData?.payload?.data?.length),
+      }),
+      withSafeReadMeta("fixture_match_facts", {
+        name: "fixture_match_facts",
+        family: "fixture",
+        label: getPackDetails("fixture_match_facts")?.label ?? null,
+        analysis_focus: getPackDetails("fixture_match_facts")?.analysis_focus ?? [],
+        ready: Boolean(matchFactsData?.payload?.data?.length),
+      }),
+      withSafeReadMeta("home_team_squad", {
+        name: "home_team_squad",
+        family: "team",
+        label: getPackDetails("home_team_squad")?.label ?? null,
+        analysis_focus: getPackDetails("home_team_squad")?.analysis_focus ?? [],
+        ready: Boolean(homeSquadData?.payload?.data?.length),
+      }),
+      withSafeReadMeta("away_team_squad", {
+        name: "away_team_squad",
+        family: "team",
+        label: getPackDetails("away_team_squad")?.label ?? null,
+        analysis_focus: getPackDetails("away_team_squad")?.analysis_focus ?? [],
+        ready: Boolean(awaySquadData?.payload?.data?.length),
+      }),
+      withSafeReadMeta("home_team_schedule", {
+        name: "home_team_schedule",
+        family: "team",
+        label: getPackDetails("home_team_schedule")?.label ?? null,
+        analysis_focus: getPackDetails("home_team_schedule")?.analysis_focus ?? [],
+        ready: Boolean(homeScheduleData?.payload?.data?.length),
+      }),
+      withSafeReadMeta("away_team_schedule", {
+        name: "away_team_schedule",
+        family: "team",
+        label: getPackDetails("away_team_schedule")?.label ?? null,
+        analysis_focus: getPackDetails("away_team_schedule")?.analysis_focus ?? [],
+        ready: Boolean(awayScheduleData?.payload?.data?.length),
+      }),
+      withSafeReadMeta("home_team_squad_fallback", {
+        name: "home_team_squad_fallback",
+        family: "team",
+        label: getPackDetails("home_team_squad_fallback")?.label ?? null,
+        analysis_focus: getPackDetails("home_team_squad_fallback")?.analysis_focus ?? [],
+        ready: Boolean(homeSquadFallbackData?.payload?.data?.length),
+      }),
+      withSafeReadMeta("away_team_squad_fallback", {
+        name: "away_team_squad_fallback",
+        family: "team",
+        label: getPackDetails("away_team_squad_fallback")?.label ?? null,
+        analysis_focus: getPackDetails("away_team_squad_fallback")?.analysis_focus ?? [],
+        ready: Boolean(awaySquadFallbackData?.payload?.data?.length),
+      }),
+      withSafeReadMeta("season_topscorers", {
+        name: "season_topscorers",
+        family: "standings",
+        label: getPackDetails("season_topscorers")?.label ?? null,
+        analysis_focus: getPackDetails("season_topscorers")?.analysis_focus ?? [],
+        ready: Boolean(topscorersData?.payload?.data?.length),
+      }),
+      withSafeReadMeta("home_team_rankings", {
+        name: "home_team_rankings",
+        family: "team",
+        label: getPackDetails("home_team_rankings")?.label ?? null,
+        analysis_focus: getPackDetails("home_team_rankings")?.analysis_focus ?? [],
+        ready: Boolean(homeRankingsData?.payload?.data?.length),
+      }),
+      withSafeReadMeta("away_team_rankings", {
+        name: "away_team_rankings",
+        family: "team",
+        label: getPackDetails("away_team_rankings")?.label ?? null,
+        analysis_focus: getPackDetails("away_team_rankings")?.analysis_focus ?? [],
+        ready: Boolean(awayRankingsData?.payload?.data?.length),
+      }),
     ];
 
     const blueprint = buildAnalysisBlueprint(liveLike);
@@ -302,6 +448,7 @@ export async function GET(request, context) {
         referee_id: actors.referee_id,
         season_id: actors.season_id,
         league_id: actors.league_id,
+        round_id: actors.round_id,
       },
       state: actors.state ?? null,
       match_is_live_like: liveLike,

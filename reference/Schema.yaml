@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: Killua Football GPT Gateway
-  version: 3.3.0
-  description: Private GPT-facing gateway with premium SportMonks data. Provides fixture browsing, league discovery, data preparation (including xG, predictions, news, expected lineups, league standings), pack-based analysis reading, market search, and filtered detailed odds (1xBet).
+  version: 3.4.0
+  description: Private GPT-facing gateway with premium SportMonks data. Provides fixture browsing, league discovery, data preparation, bundle (all-in-one) and pack-based analysis reading, market search, and filtered detailed odds (1xBet). Bundle endpoint is preferred over individual packs.
 
 servers:
   - url: https://killua-football.vercel.app/api/gpt
@@ -62,6 +62,8 @@ components:
         - fixture_news
         - fixture_expected_lineups
         - fixture_transfer_rumours
+        - fixture_commentaries
+        - fixture_match_facts
         - h2h_context
         - h2h_events
         - h2h_statistics
@@ -69,9 +71,88 @@ components:
         - home_team_all
         - away_team_all
         - referee_all
+        - home_team_squad
+        - away_team_squad
+        - home_team_schedule
+        - away_team_schedule
+        - home_team_squad_fallback
+        - away_team_squad_fallback
+        - season_topscorers
+        - home_team_rankings
+        - away_team_rankings
         - league_standings
+        - standings_round
+        - standings_corrections
+        - standings_live
         - odds_prematch_summary
         - odds_inplay_summary
+
+    BundleResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        fixture_id:
+          type: integer
+        bundle_version:
+          type: integer
+        match_is_live_like:
+          type: boolean
+        discovered:
+          $ref: "#/components/schemas/GenericObject"
+        state:
+          $ref: "#/components/schemas/GenericObject"
+        fixture_context:
+          $ref: "#/components/schemas/GenericObject"
+        fixture_squads:
+          $ref: "#/components/schemas/GenericObject"
+        fixture_events_scores:
+          $ref: "#/components/schemas/GenericObject"
+        fixture_statistics:
+          $ref: "#/components/schemas/GenericObject"
+        fixture_periods:
+          $ref: "#/components/schemas/GenericObject"
+        fixture_xg:
+          $ref: "#/components/schemas/GenericObject"
+        fixture_predictions:
+          $ref: "#/components/schemas/GenericObject"
+        fixture_news:
+          $ref: "#/components/schemas/GenericObject"
+        fixture_expected_lineups:
+          $ref: "#/components/schemas/GenericObject"
+        fixture_transfer_rumours:
+          $ref: "#/components/schemas/GenericObject"
+        fixture_commentaries:
+          $ref: "#/components/schemas/GenericObject"
+        fixture_match_facts:
+          $ref: "#/components/schemas/GenericObject"
+        h2h:
+          $ref: "#/components/schemas/GenericObject"
+        home_team:
+          $ref: "#/components/schemas/GenericObject"
+        away_team:
+          $ref: "#/components/schemas/GenericObject"
+        referee:
+          $ref: "#/components/schemas/GenericObject"
+        standings:
+          $ref: "#/components/schemas/GenericObject"
+        topscorers:
+          $ref: "#/components/schemas/GenericObject"
+        odds:
+          $ref: "#/components/schemas/GenericObject"
+        coverage:
+          $ref: "#/components/schemas/GenericObject"
+        notes:
+          type: array
+          items:
+            type: string
+        request_id:
+          type:
+            - string
+            - "null"
+      required:
+        - ok
+      additionalProperties: true
 
     PrepareResponse:
       type: object
@@ -529,6 +610,50 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PrepareResponse"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /fixtures/{fixtureId}/bundle:
+    get:
+      operationId: getFixtureAnalysisBundle
+      summary: Get ALL analysis data in one response. Preferred over individual packs. Call prepare first.
+      parameters:
+        - name: fixtureId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: h2h_limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 5
+            minimum: 1
+            maximum: 20
+      responses:
+        "200":
+          description: Complete analysis bundle
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BundleResponse"
         "400":
           description: Invalid input
           content:

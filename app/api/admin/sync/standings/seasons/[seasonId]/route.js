@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
-import { fetchAllSportMonksPages } from "@/lib/sportmonks";
+import { fetchSportMonksPage } from "@/lib/sportmonks";
 import { staleWhileRevalidate, parseRefreshMode } from "@/lib/cache";
 import { isAuthorized, unauthorized } from "@/lib/admin";
 
@@ -32,12 +32,12 @@ async function refresh(seasonId, dbQuery = query) {
   if (!syncId) throw new Error("Failed to create sync run");
 
   try {
-    const pages = await fetchAllSportMonksPages(
+    // Standings endpoint has Pagination: No — single request returns all data
+    const resp = await fetchSportMonksPage(
       `standings/seasons/${seasonId}`,
-      { include: INCLUDE, per_page: 50, page: 1 }
+      { include: INCLUDE }
     );
-
-    const allData = pages.flatMap((p) => p.payload?.data ?? []);
+    const allData = resp?.data ?? [];
 
     await dbQuery(
       `insert into cache.standings_seasons_raw
@@ -48,7 +48,7 @@ async function refresh(seasonId, dbQuery = query) {
          fetched_at  = excluded.fetched_at,
          sync_run_id = excluded.sync_run_id,
          updated_at  = now()`,
-      [seasonId, JSON.stringify({ data: allData }), syncId]
+      [seasonId, JSON.stringify({ data: Array.isArray(allData) ? allData : [allData] }), syncId]
     );
 
     await dbQuery(
