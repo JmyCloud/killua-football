@@ -230,7 +230,7 @@
     "/fixtures/{fixtureId}/bundle": {
       "get": {
         "operationId": "getFixtureAnalysisBundle",
-        "summary": "Get ALL analysis data for a fixture in one response. Preferred over reading individual packs. Call prepare first, then use this.",
+        "summary": "Get analysis data in 2 parts. Part 1: core match data (lineups, events, stats, xG, predictions, odds). Part 2: context (H2H, standings, team stats, news). ALWAYS read both parts.",
         "parameters": [
           {
             "name": "fixtureId",
@@ -240,16 +240,16 @@
             "description": "The fixture ID"
           },
           {
-            "name": "h2h_limit",
+            "name": "part",
             "in": "query",
             "required": false,
-            "schema": { "type": "integer", "default": 5, "minimum": 1, "maximum": 20 },
-            "description": "Number of H2H matches to include"
+            "schema": { "type": "integer", "enum": [1, 2], "default": 1 },
+            "description": "Bundle part number. Part 1 = core match data. Part 2 = H2H, standings, team stats, news, commentaries. Always read BOTH parts for complete analysis."
           }
         ],
         "responses": {
           "200": {
-            "description": "Complete analysis bundle with all packs, H2H, standings, odds, team/referee stats in one object",
+            "description": "Bundle part with match_summary (includes explicit final_score), data sections, and notes",
             "content": {
               "application/json": {
                 "schema": {
@@ -258,29 +258,21 @@
                     "ok": { "type": "boolean" },
                     "fixture_id": { "type": "integer" },
                     "bundle_version": { "type": "integer" },
-                    "match_is_live_like": { "type": "boolean" },
-                    "discovered": { "type": "object" },
-                    "state": { "type": "object" },
-                    "fixture_context": { "type": "object" },
-                    "fixture_squads": { "type": "object" },
-                    "fixture_events_scores": { "type": "object" },
-                    "fixture_statistics": { "type": "object" },
-                    "fixture_periods": { "type": "object" },
-                    "fixture_xg": { "type": "object" },
-                    "fixture_predictions": { "type": "object" },
-                    "fixture_news": { "type": "object" },
-                    "fixture_expected_lineups": { "type": "object" },
-                    "fixture_transfer_rumours": { "type": "object" },
-                    "fixture_commentaries": { "type": "object" },
-                    "fixture_match_facts": { "type": "object" },
-                    "h2h": { "type": "object" },
-                    "home_team": { "type": "object" },
-                    "away_team": { "type": "object" },
-                    "referee": { "type": "object" },
-                    "standings": { "type": "object" },
-                    "topscorers": { "type": "object" },
-                    "odds": { "type": "object" },
-                    "coverage": { "type": "object" },
+                    "total_parts": { "type": "integer" },
+                    "current_part": { "type": "integer" },
+                    "match_summary": {
+                      "type": "object",
+                      "description": "Compact match info with unambiguous ft (final score) and ht (half-time score). Always use this for the correct score.",
+                      "properties": {
+                        "home_team": { "type": "string" },
+                        "away_team": { "type": "string" },
+                        "ft": { "type": "string", "description": "Final score e.g. 1-2" },
+                        "ht": { "type": "string", "description": "Half-time score e.g. 0-1" },
+                        "status": { "type": "string" },
+                        "league": { "type": "string" },
+                        "venue": { "type": "string" }
+                      }
+                    },
                     "notes": { "type": "array", "items": { "type": "string" } },
                     "request_id": { "type": "string" }
                   }

@@ -89,6 +89,7 @@ components:
 
     BundleResponse:
       type: object
+      description: "Multi-part bundle (v3). Part 1 = core match data, Part 2 = context & history. Both include match_summary with ft (final score)."
       properties:
         ok:
           type: boolean
@@ -96,52 +97,35 @@ components:
           type: integer
         bundle_version:
           type: integer
-        match_is_live_like:
-          type: boolean
-        discovered:
-          $ref: "#/components/schemas/GenericObject"
-        state:
-          $ref: "#/components/schemas/GenericObject"
-        fixture_context:
-          $ref: "#/components/schemas/GenericObject"
-        fixture_squads:
-          $ref: "#/components/schemas/GenericObject"
-        fixture_events_scores:
-          $ref: "#/components/schemas/GenericObject"
-        fixture_statistics:
-          $ref: "#/components/schemas/GenericObject"
-        fixture_periods:
-          $ref: "#/components/schemas/GenericObject"
-        fixture_xg:
-          $ref: "#/components/schemas/GenericObject"
-        fixture_predictions:
-          $ref: "#/components/schemas/GenericObject"
-        fixture_news:
-          $ref: "#/components/schemas/GenericObject"
-        fixture_expected_lineups:
-          $ref: "#/components/schemas/GenericObject"
-        fixture_transfer_rumours:
-          $ref: "#/components/schemas/GenericObject"
-        fixture_commentaries:
-          $ref: "#/components/schemas/GenericObject"
-        fixture_match_facts:
-          $ref: "#/components/schemas/GenericObject"
-        h2h:
-          $ref: "#/components/schemas/GenericObject"
-        home_team:
-          $ref: "#/components/schemas/GenericObject"
-        away_team:
-          $ref: "#/components/schemas/GenericObject"
-        referee:
-          $ref: "#/components/schemas/GenericObject"
-        standings:
-          $ref: "#/components/schemas/GenericObject"
-        topscorers:
-          $ref: "#/components/schemas/GenericObject"
-        odds:
-          $ref: "#/components/schemas/GenericObject"
-        coverage:
-          $ref: "#/components/schemas/GenericObject"
+        total_parts:
+          type: integer
+          description: "Always 2"
+        current_part:
+          type: integer
+          description: "1 or 2"
+        match_summary:
+          type: object
+          description: "Compact match info. ft = final score (e.g. '1-2'), ht = half-time. ALWAYS use this for correct score."
+          properties:
+            home_team:
+              type: string
+            away_team:
+              type: string
+            ft:
+              type: string
+              description: "Final score e.g. '1-2'"
+            ht:
+              type: string
+              description: "Half-time score e.g. '0-1'"
+            status:
+              type: string
+            date:
+              type: string
+              format: date-time
+            league:
+              type: string
+            venue:
+              type: string
         notes:
           type: array
           items:
@@ -632,24 +616,24 @@ paths:
   /fixtures/{fixtureId}/bundle:
     get:
       operationId: getFixtureAnalysisBundle
-      summary: Get ALL analysis data in one response. Preferred over individual packs. Call prepare first.
+      summary: "Get analysis data in 2 parts. Part 1: core match data. Part 2: context & history. ALWAYS read both parts."
       parameters:
         - name: fixtureId
           in: path
           required: true
           schema:
             type: integer
-        - name: h2h_limit
+        - name: part
           in: query
           required: false
           schema:
             type: integer
-            default: 5
-            minimum: 1
-            maximum: 20
+            enum: [1, 2]
+            default: 1
+          description: "Part 1 = lineups, events, stats, xG, predictions, odds. Part 2 = H2H, standings, team stats, news, commentaries."
       responses:
         "200":
-          description: Complete analysis bundle
+          description: Bundle part with match_summary (ft = final score, ht = half-time)
           content:
             application/json:
               schema:

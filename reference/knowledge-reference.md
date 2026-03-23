@@ -1,33 +1,32 @@
 # Killua Football — Analysis Reference Guide
 
-## Bundle Response Structure
-The `/fixtures/{id}/bundle` endpoint returns ALL data in one call. Key sections:
+## Bundle v3 — Multi-Part System
+The `/fixtures/{id}/bundle` endpoint returns data in **2 parts**. Always read BOTH parts.
 
-### Fixture Data
+### Part 1: Core Match Data (`?part=1`, default)
+- `match_summary` → **ALWAYS use `ft` for final score** (e.g. "1-2"), `ht` for half-time. Never parse scores array manually.
 - `fixture_context` → `base`, `state`, `league`, `season`, `stage`, `round`, `group`, `aggregate`, `venue`, `weatherreport`, `metadata`
-- `fixture_squads` → `participants`, `formations`, `lineups`, `referees`, `coaches`, `sidelined`
-- `fixture_events_scores` → `scores`, `events`
-- `fixture_statistics` → full match statistics object
+- `fixture_squads` → `participants`, `formations`, `lineups` (slimmed: name, pos, rating, goals, assists, cards), `referees`, `coaches`, `sidelined`
+- `fixture_events_scores` → `scores` (compact), `events` (minute, type, player, result)
+- `fixture_statistics` → full match statistics (flattened)
 - `fixture_periods` → period-by-period breakdown
 - `fixture_xg` → expected goals data (team + player level)
 - `fixture_predictions` → probabilities + value_bets array
-- `fixture_news` → pre-match news articles
 - `fixture_expected_lineups` → predicted XI with positions
-- `fixture_transfer_rumours` → transfer targets for both teams
-- `fixture_commentaries` → live match commentary (live only)
 - `fixture_match_facts` → pre-match key facts
+- `odds` → prematch + inplay summaries
 
-### H2H Data
-- `h2h.context` → match summaries (last N meetings)
+### Part 2: Context & History (`?part=2`)
+- `match_summary` → same as Part 1 (repeated for reference)
+- `h2h.context` → match summaries (last 5 meetings)
 - `h2h.events` → goals, cards per meeting
 - `h2h.statistics` → stats per meeting
 - `h2h.referees` → referee info per meeting
-
-### Team Data (home_team / away_team)
-- `.stats` → season statistics: attacking, defending, passing, physical, advanced metrics
-- `.squad` → full season squad: appearances, ratings, goals, assists
-- `.schedule` → recent + upcoming fixtures (congestion analysis)
-- `.squad_fallback` → current roster when season squad unavailable
+- `home_team` / `away_team`:
+  - `.stats` → season statistics: attacking, defending, passing, physical, advanced metrics
+  - `.squad` → squad (max 25): name, pos, appearances, goals, assists, rating
+  - `.schedule` → recent + upcoming fixtures (max 10, congestion analysis)
+  - `.squad_fallback` → current roster when season squad unavailable
 - `.rankings` → FIFA/domestic rankings
 
 ### Referee
