@@ -227,10 +227,70 @@
         }
       }
     },
+    "/fixtures/{fixtureId}/digest": {
+      "get": {
+        "operationId": "getFixtureAnalysisDigest",
+        "summary": "PRIMARY endpoint. Returns a compact pre-computed analysis digest (~5-10KB) with ALL key metrics in ONE call. Always use this first. Contains: match score, stats, xG, standings, H2H, predictions, odds overview, referee profile, lineups, events, weather, schedule context, news headlines, and data_flags showing exactly what is available.",
+        "parameters": [
+          {
+            "name": "fixtureId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "integer" },
+            "description": "The fixture ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pre-computed analysis digest with all key metrics extracted server-side",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": { "type": "boolean" },
+                    "fixture_id": { "type": "integer" },
+                    "digest_version": { "type": "integer" },
+                    "match": {
+                      "type": "object",
+                      "description": "Match info. ft = final score (definitive). ht = half-time.",
+                      "properties": {
+                        "home": { "type": "string" },
+                        "away": { "type": "string" },
+                        "ft": { "type": "string", "description": "Final score e.g. 1-2" },
+                        "ht": { "type": "string", "description": "Half-time score e.g. 0-1" },
+                        "status": { "type": "string" },
+                        "league": { "type": "string" },
+                        "venue": { "type": "string" },
+                        "date": { "type": "string" }
+                      }
+                    },
+                    "stats": { "type": "object", "description": "Key match statistics: possession, shots, xG, corners, fouls etc. Each stat has home/away values." },
+                    "standings": { "type": "object", "description": "League position for both teams: pos, pts, W/D/L, GF/GA, form" },
+                    "h2h": { "type": "object", "description": "H2H summary: matches, home_wins, draws, away_wins, avg_goals, results" },
+                    "predictions": { "type": "object", "description": "Probabilities and value_bets from SportMonks" },
+                    "odds_overview": { "type": "object", "description": "Key 1xBet market availability (1X2, O/U, BTTS, DC)" },
+                    "tactical": { "type": "object", "description": "Formations, XI names, coaches, subs used" },
+                    "events": { "type": "array", "description": "Goals, cards, subs timeline", "items": { "type": "object" } },
+                    "referee": { "type": "object", "description": "Referee profile with avg cards/fouls" },
+                    "data_flags": { "type": "object", "description": "Explicit boolean flags showing what data is available (xg, predictions, standings, etc.)" },
+                    "notes": { "type": "array", "items": { "type": "string" } },
+                    "request_id": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Invalid fixture ID" },
+          "401": { "description": "Unauthorized" },
+          "500": { "description": "Server error" }
+        }
+      }
+    },
     "/fixtures/{fixtureId}/bundle": {
       "get": {
         "operationId": "getFixtureAnalysisBundle",
-        "summary": "Get analysis data in 2 parts. Part 1: core match data (lineups, events, stats, xG, predictions, odds). Part 2: context (H2H, standings, team stats, news). ALWAYS read both parts.",
+        "summary": "FALLBACK: Raw analysis data in 2 parts. Use digest endpoint first. Only use bundle for deep-dive into specific raw data sections.",
         "parameters": [
           {
             "name": "fixtureId",

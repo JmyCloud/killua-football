@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: Killua Football GPT Gateway
   version: 3.4.0
-  description: Private GPT-facing gateway with premium SportMonks data. Provides fixture browsing, league discovery, data preparation, bundle (all-in-one) and pack-based analysis reading, market search, and filtered detailed odds (1xBet). Bundle endpoint is preferred over individual packs.
+  description: Private GPT-facing gateway with premium SportMonks data. Provides fixture browsing, league discovery, data preparation, digest (compact pre-computed analysis in ONE call), bundle (raw data fallback), pack-based reading, market search, and filtered detailed odds (1xBet). Digest endpoint is preferred — always use it first.
 
 servers:
   - url: https://killua-football.vercel.app/api/gpt
@@ -126,6 +126,173 @@ components:
               type: string
             venue:
               type: string
+        notes:
+          type: array
+          items:
+            type: string
+        request_id:
+          type:
+            - string
+            - "null"
+      required:
+        - ok
+      additionalProperties: true
+
+    DigestResponse:
+      type: object
+      description: "Pre-computed analysis digest v2 (~8-15KB). Server extracts ALL key metrics from every data source. GPT reads in ONE call. Zero truncation. 100% bundle parity."
+      properties:
+        ok:
+          type: boolean
+        fixture_id:
+          type: integer
+        digest_version:
+          type: integer
+          description: "Currently 2"
+        match:
+          type: object
+          description: "Match info. ft = definitive final score. ht = half-time. Includes stage/group for cups."
+          properties:
+            home:
+              type: string
+            away:
+              type: string
+            ft:
+              type: string
+              description: "Final score e.g. '1-2'"
+            ht:
+              type: string
+              description: "Half-time score e.g. '0-1'"
+            status:
+              type: string
+            league:
+              type: string
+            season:
+              type: string
+            round:
+              type: string
+            stage:
+              type: string
+            group:
+              type: string
+            venue:
+              type: string
+            date:
+              type: string
+            is_live:
+              type: boolean
+        aggregate:
+          type: object
+          description: "Cup ties aggregate: result, home_score, away_score"
+        weather:
+          $ref: "#/components/schemas/GenericObject"
+        tactical:
+          type: object
+          description: "Formations, XI names, coaches, subs used, top_performers (name, rating, goals, assists, cards, side)"
+        sidelined:
+          type: object
+          description: "Injured/suspended players per team"
+        events:
+          type: array
+          description: "Goals, cards, subs timeline"
+          items:
+            $ref: "#/components/schemas/GenericObject"
+        stats:
+          type: object
+          description: "Key match stats: possession, shots, xG, corners, fouls, tackles, cards, dangerous_attacks. Each has home/away."
+        xg:
+          type: object
+          description: "Standalone xG if not in stats"
+        periods:
+          type: object
+          description: "1H/2H goal splits per team"
+        standings:
+          type: object
+          description: "League position: pos, pts, W/D/L, GF/GA/GD, form, home_record, away_record, home_goals, away_goals"
+        round_standings:
+          type: array
+          description: "Group stage mini-table: pos, team, pts, p, gd"
+          items:
+            $ref: "#/components/schemas/GenericObject"
+        standings_corrections:
+          type: array
+          description: "Point deductions affecting teams"
+          items:
+            $ref: "#/components/schemas/GenericObject"
+        live_standings:
+          type: object
+          description: "Real-time table position (live matches only)"
+        h2h:
+          type: object
+          description: "H2H summary: matches, wins, draws, avg_goals, btts_pct, over25_pct, results"
+        h2h_discipline:
+          type: object
+          description: "H2H deep stats: avg_cards_per_match, avg_possession, avg_shots"
+        predictions:
+          type: object
+          description: "Probabilities and value_bets"
+        odds_overview:
+          type: object
+          description: "Pre-match 1xBet market availability: 1X2, O/U, BTTS, DC, AH"
+        inplay_odds_overview:
+          type: object
+          description: "Inplay odds availability (live matches only)"
+        referee:
+          type: object
+          description: "Referee profile: name, matches, yellowcards_avg, redcards_total, penalties, fouls_avg"
+        home_season:
+          type: object
+          description: "Home team season stats: goals, clean_sheets, W/D/L, btts, over_2_5, avg_corners, avg_cards"
+        away_season:
+          type: object
+          description: "Away team season stats"
+        home_squad_depth:
+          type: array
+          description: "Home top 6 squad contributors: name, pos, apps, goals, assists, rating, injured"
+          items:
+            $ref: "#/components/schemas/GenericObject"
+        away_squad_depth:
+          type: array
+          description: "Away top 6 squad contributors"
+          items:
+            $ref: "#/components/schemas/GenericObject"
+        rankings:
+          type: object
+          description: "FIFA/domestic rankings: home/away with position, type, points"
+        home_schedule:
+          type: object
+          description: "Home rest days + next opponent"
+        away_schedule:
+          type: object
+          description: "Away rest days + next opponent"
+        news:
+          type: array
+          items:
+            type: string
+        match_facts:
+          type: array
+          items:
+            type: string
+        commentaries:
+          type: array
+          description: "Key live match moments (live only): minute, text, is_goal"
+          items:
+            $ref: "#/components/schemas/GenericObject"
+        transfer_rumours:
+          type: array
+          items:
+            type: string
+        topscorers:
+          type: array
+          description: "League top scorers from both teams"
+          items:
+            $ref: "#/components/schemas/GenericObject"
+        expected_lineups:
+          type: object
+          description: "Pre-match predicted XI availability"
+        data_flags:
+          type: object
+          description: "21 explicit flags: xg, predictions, lineups_confirmed, expected_lineups, odds_prematch, odds_inplay, standings, round_standings, standings_corrections, live_standings, h2h_count, referee_stats, news_count, match_facts, commentaries, team_stats, home_squad, away_squad, home_rankings, away_rankings, topscorers"
         notes:
           type: array
           items:

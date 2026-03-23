@@ -1,7 +1,47 @@
 # Killua Football — Analysis Reference Guide
 
-## Bundle v3 — Multi-Part System
-The `/fixtures/{id}/bundle` endpoint returns data in **2 parts**. Always read BOTH parts.
+## Digest v2 — PRIMARY Endpoint (Recommended)
+`GET /fixtures/{id}/digest` returns a compact pre-computed summary (~8-15KB) in **ONE call**.
+The server extracts ALL key metrics from every data source. 100% bundle parity. Zero truncation.
+
+### What's in the digest (v2 — complete):
+- **match**: home, away, ft (final score), ht (half-time), status, league, season, round, stage, group, venue, date, is_live
+- **aggregate**: cup tie aggregate result, home_score, away_score
+- **weather**: temp_c, wind_kmh, humidity, clouds, condition
+- **tactical**: formations, home_xi, away_xi, coaches, subs_used, top_performers (name, rating, goals, assists, cards, side)
+- **sidelined**: injured/suspended players per team
+- **events**: goals, cards, subs timeline (min, type, player, team_id, result)
+- **stats**: possession, shots, shots_on_target, xG, corners, fouls, offsides, passes_pct, saves, tackles, cards, dangerous_attacks
+- **xg**: dedicated xG values (if not already in stats)
+- **periods**: 1H/2H goal splits per team
+- **standings**: pos, pts, W/D/L, GF/GA/GD, form, home_record ("5W-2D-1L"), home_goals ("14GF-5GA"), away_record, away_goals
+- **round_standings**: group stage mini-table (pos, team, pts, p, gd)
+- **standings_corrections**: point deductions affecting teams
+- **live_standings**: real-time table position (live matches only)
+- **h2h**: matches, home_wins, draws, away_wins, avg_goals, btts_pct, over25_pct, results
+- **h2h_discipline**: avg_cards_per_match, avg_possession, avg_shots from past meetings
+- **predictions**: probabilities + value_bets
+- **odds_overview**: pre-match 1xBet market availability (1X2, O/U, BTTS, DC, AH) + total_markets
+- **inplay_odds_overview**: live odds availability (live matches only)
+- **referee**: name, matches, yellowcards_avg, redcards_total, penalties, fouls_avg
+- **home_season / away_season**: sample, goals_scored/conceded, clean_sheets, W/D/L, avg_possession, btts, over_2_5, failed_to_score, avg_corners, avg_cards, scoring_minutes
+- **home_squad_depth / away_squad_depth**: top 6 contributors (name, pos, apps, goals, assists, rating, injured)
+- **rankings**: FIFA/domestic rankings (position, type, points) for both teams
+- **home_schedule / away_schedule**: rest_days, next_in_days, next_opponent
+- **news**: top 5 headlines
+- **match_facts**: up to 8 key facts
+- **commentaries**: key live match moments (live only) — minute, text, is_goal
+- **transfer_rumours**: incoming/outgoing targets
+- **topscorers**: league top scorers from both teams
+- **expected_lineups**: pre-match predicted XI availability
+- **data_flags**: 21 explicit flags (xg, predictions, lineups_confirmed, expected_lineups, odds_prematch, odds_inplay, standings, round_standings, standings_corrections, live_standings, h2h_count, referee_stats, news_count, match_facts, commentaries, team_stats, home_squad, away_squad, home_rankings, away_rankings, topscorers)
+
+### GPT Execution: prepare → digest → odds → analysis. ONE data call.
+
+---
+
+## Bundle v3 — Multi-Part System (Fallback)
+The `/fixtures/{id}/bundle` endpoint returns data in **2 parts**. Use as fallback for raw data deep-dive.
 
 ### Part 1: Core Match Data (`?part=1`, default)
 - `match_summary` → **ALWAYS use `ft` for final score** (e.g. "1-2"), `ht` for half-time. Never parse scores array manually.
