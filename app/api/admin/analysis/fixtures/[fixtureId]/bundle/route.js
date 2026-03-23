@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { isAuthorized, unauthorized } from "@/lib/admin";
+import { slimBundle } from "@/lib/slim-bundle";
 import {
   resolveFixtureActors,
   getFixtureChunksMap,
@@ -194,7 +195,7 @@ export async function GET(request, context) {
     const body = {
       ok: true,
       fixture_id: id,
-      bundle_version: 1,
+      bundle_version: 2,
       match_is_live_like: liveLike,
       discovered: {
         home_team_id: actors.home_team_id,
@@ -294,7 +295,10 @@ export async function GET(request, context) {
       ],
     };
 
-    return NextResponse.json(body, {
+    const wantRaw = url.searchParams.get("raw") === "1";
+    const final = wantRaw ? body : slimBundle(body);
+
+    return NextResponse.json(final, {
       headers: {
         "cache-control": "public, s-maxage=120, stale-while-revalidate=60",
       },

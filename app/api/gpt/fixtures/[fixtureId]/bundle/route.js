@@ -19,9 +19,10 @@ export async function GET(request, context) {
   }
 
   try {
+    const qs = new URL(request.url).search;
     const result = await adminJson(
       request,
-      `/analysis/fixtures/${fixtureId}/bundle`,
+      `/analysis/fixtures/${fixtureId}/bundle${qs || ""}`,
       { timeout: 55000 }
     );
 

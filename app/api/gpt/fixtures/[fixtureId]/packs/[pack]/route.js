@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { adminJson } from "@/lib/admin";
 import { isGptAuthorized, gptUnauthorized } from "@/lib/gpt";
 import { GPT_READ_MODES, isValidGptPack } from "@/lib/gpt-contract";
+import { slimBundle } from "@/lib/slim-bundle";
 import {
   getRequestId,
   jsonError,
@@ -61,9 +62,11 @@ export async function GET(request, context) {
       );
     }
 
+    const slimmed = slimBundle(result.body ?? { ok: true });
+
     return NextResponse.json(
       {
-        ...(result.body ?? { ok: true }),
+        ...slimmed,
         request_id: requestId,
       },
       {
