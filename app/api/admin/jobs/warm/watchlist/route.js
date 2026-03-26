@@ -6,6 +6,7 @@ import {
   parseFixtureIdList,
   parsePositiveInt,
 } from "@/lib/watchlist";
+import { ALLOWED_LEAGUE_IDS } from "@/lib/sportmonks";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,22 +44,28 @@ async function runWithConcurrency(items, concurrency, worker) {
 }
 
 async function loadWatchlistRows({ limit, lookaheadHours, lookbackHours }) {
+  const leagueIds = ALLOWED_LEAGUE_IDS;
+  const placeholders = leagueIds.map((_, i) => `$${i + 4}`).join(", ");
+
   const result = await query(
     `
-    select *
-    from cache.fixture_watchlist
-    where enabled = true
-      and (expires_at is null or expires_at > now())
+    select w.*
+    from cache.fixture_watchlist w
+    inner join cache.fixtures_index lg
+      on lg.fixture_id = w.fixture_id and lg.chunk = 'league'
+    where w.enabled = true
+      and (w.expires_at is null or w.expires_at > now())
       and (
-        starts_at is null
-        or starts_at between now() - ($1 || ' hours')::interval
+        w.starts_at is null
+        or w.starts_at between now() - ($1 || ' hours')::interval
                          and now() + ($2 || ' hours')::interval
-        or mode = 'live'
+        or w.mode = 'live'
       )
-    order by priority asc, starts_at asc nulls last, fixture_id asc
+      and (lg.payload->'league'->>'id')::bigint in (${placeholders})
+    order by w.priority asc, w.starts_at asc nulls last, w.fixture_id asc
     limit $3
     `,
-    [lookbackHours, lookaheadHours, limit]
+    [lookbackHours, lookaheadHours, limit, ...leagueIds]
   );
 
   return result.rows;
