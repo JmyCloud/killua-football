@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { isAuthorized, unauthorized, adminJson } from "@/lib/admin";
 import { parsePositiveInt } from "@/lib/watchlist";
-import { fetchAllSportMonksPages } from "@/lib/sportmonks";
+import { fetchAllSportMonksPages, FIXTURE_LEAGUES_FILTER } from "@/lib/sportmonks";
 import { fetchFixturesLatest } from "@/lib/sync-direct";
 import { tryWithAdvisoryLock } from "@/lib/locks";
 
@@ -158,6 +158,7 @@ async function fetchLatestLivescores() {
   const pages = await fetchAllSportMonksPages("livescores/latest", {
     include: "league;state;participants",
     per_page: 50,
+    filters: FIXTURE_LEAGUES_FILTER,
   });
 
   const items = [];
@@ -173,6 +174,7 @@ async function fetchInplayLivescores() {
   const pages = await fetchAllSportMonksPages("livescores/inplay", {
     include: "league;state;participants",
     per_page: 50,
+    filters: FIXTURE_LEAGUES_FILTER,
   });
 
   const items = [];

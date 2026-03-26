@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { isAuthorized, unauthorized } from "@/lib/admin";
 import { parsePositiveInt } from "@/lib/watchlist";
-import { fetchAllSportMonksPages } from "@/lib/sportmonks";
+import { fetchAllSportMonksPages, FIXTURE_LEAGUES_FILTER } from "@/lib/sportmonks";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -184,6 +184,7 @@ async function fetchWindowFixtures({ lookaheadHours, lookbackHours }) {
     {
       include: "league;state;participants",
       per_page: 50,
+      filters: FIXTURE_LEAGUES_FILTER,
     }
   );
 
